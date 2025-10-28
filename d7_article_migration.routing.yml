@@ -1,0 +1,7 @@
+d7_article_migration.admin_form:
+  path: '/admin/config/content/d7-article-migration'
+  defaults:
+    _form: '\Drupal\d7_article_migration\Form\MigrationForm'
+    _title: 'D7 Article Migration'
+  requirements:
+    _permission: 'administer site configuration'

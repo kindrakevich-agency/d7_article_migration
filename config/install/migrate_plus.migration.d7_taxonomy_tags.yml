@@ -1,0 +1,27 @@
+id: d7_taxonomy_tags
+label: 'D7 Taxonomy Tags'
+migration_group: d7_migration
+source:
+  plugin: d7_taxonomy_term
+  # Change 'tags' to your D7 vocabulary machine name if different.
+  bundle: 'tags'
+process:
+  vid:
+    plugin: default_value
+    # Change 'tags' to your D11 vocabulary machine name if different.
+    default_value: 'tags'
+  name: name
+  description: description
+  weight: weight
+  parent:
+    -
+      plugin: skip_on_empty
+      method: process
+      source: parent
+    -
+      plugin: migration_lookup
+      migration: d7_taxonomy_tags
+  changed: timestamp
+destination:
+  plugin: 'entity:taxonomy_term'
+migration_dependencies: {}

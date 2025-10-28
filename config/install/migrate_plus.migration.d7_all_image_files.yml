@@ -1,0 +1,31 @@
+id: d7_all_image_files
+label: 'D7 All Image Files'
+migration_group: d7_migration
+source:
+  plugin: d7_file
+  # Only migrate image files.
+  constants:
+    IMAGE_MIMES:
+      - 'image/jpeg'
+      - 'image/png'
+      - 'image/gif'
+      - 'image/bmp'
+      - 'image/tiff'
+      - 'image/webp'
+  conditions:
+    -
+      field: filemime
+      value: constants.IMAGE_MIMES
+      operator: IN
+process:
+  fid: fid
+  filename: filename
+  uri: uri
+  filemime: filemime
+  status: status
+  created: timestamp
+  changed: timestamp
+  uid: uid
+destination:
+  plugin: 'entity:file'
+migration_dependencies: {}

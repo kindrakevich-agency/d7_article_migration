@@ -1,0 +1,6 @@
+d7_article_migration.admin:
+  title: 'D7 Article Migration'
+  description: 'Run the D7 to D11 article migration.'
+  parent: system.admin_config_content
+  route_name: d7_article_migration.admin_form
+  weight: 100

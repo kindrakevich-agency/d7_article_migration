@@ -1,0 +1,33 @@
+id: d7_url_aliases
+label: 'D7 URL Aliases (Nodes and Terms)'
+migration_group: d7_migration
+source:
+  plugin: d7_url_alias
+  constants:
+    DRUPAL_NORMAL_PATH_IMPLEMENTATION: 'Drupal'
+process:
+  # Handle node and term aliases (Req #6)
+  source:
+    -
+      plugin: skip_if_not_set
+      source: source
+    -
+      plugin: callback
+      callable:
+        - '@plugin.manager.migrate.process'
+        - 'getSourceSystemPath'
+      source:
+        - source
+        - constants/DRUPAL_NORMAL_PATH_IMPLEMENTATION
+  alias: alias
+  langcode:
+    plugin: default_value
+    source: language
+    default_value: "und"
+destination:
+  plugin: 'entity:path_alias'
+# Run this after nodes and terms are created
+migration_dependencies:
+  required:
+    - d7_article_nodes
+    - d7_taxonomy_tags
