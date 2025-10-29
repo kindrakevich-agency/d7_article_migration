@@ -20,8 +20,7 @@ class D7Migrator {
   protected ClientInterface $httpClient;
   protected LoggerInterface $logger;
   protected Connection $database;
-  protected string $filesBaseUrl;
-  protected string $destinationPath = 'public://d7_migrated';
+  protected string $filesBasePath;
   protected bool $updateExisting = FALSE;
   protected ?Connection $sourceDb = NULL;
 
@@ -39,12 +38,8 @@ class D7Migrator {
     $this->database = $database;
   }
 
-  public function setFilesBaseUrl(string $url) {
-    $this->filesBaseUrl = $url;
-  }
-
-  public function setDestinationPath(string $path) {
-    $this->destinationPath = $path;
+  public function setFilesBasePath(string $path) {
+    $this->filesBasePath = $path;
   }
 
   public function setUpdateExisting(bool $update) {
@@ -218,14 +213,27 @@ class D7Migrator {
     }
 
     $relative = ltrim(preg_replace('#^(public://|private://|sites/default/files/)#','',$f->uri),'/');
-    $url = rtrim($this->filesBaseUrl,'/').'/'.$relative;
+    $destination = 'public://'.$relative;
 
     try {
-      $response = $this->httpClient->get($url,['stream'=>true,'timeout'=>30]);
-      if ($response->getStatusCode() !== 200) throw new \Exception('Bad status');
+      // Check if filesBasePath is HTTP URL or local path
+      $isUrl = preg_match('#^https?://#', $this->filesBasePath);
 
-      $data = $response->getBody()->getContents();
-      $destination = rtrim($this->destinationPath, '/').'/'.$relative;
+      if ($isUrl) {
+        // Download from HTTP URL
+        $url = rtrim($this->filesBasePath,'/').'/'.$relative;
+        $response = $this->httpClient->get($url,['stream'=>true,'timeout'=>30]);
+        if ($response->getStatusCode() !== 200) throw new \Exception('Bad status');
+        $data = $response->getBody()->getContents();
+      } else {
+        // Copy from local filesystem
+        $sourcePath = rtrim($this->filesBasePath,'/').'/'.$relative;
+        if (!file_exists($sourcePath)) {
+          throw new \Exception("File not found: {$sourcePath}");
+        }
+        $data = file_get_contents($sourcePath);
+      }
+
       $this->fileSystem->prepareDirectory(dirname($destination), FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
       $uri = file_save_data($data,$destination,FILE_EXISTS_REPLACE);
       if ($uri) {
@@ -239,7 +247,7 @@ class D7Migrator {
         return $new_fid;
       }
     } catch (\Exception $e) {
-      $this->logger->warning("Failed to download file {$url}: ".$e->getMessage());
+      $this->logger->warning("Failed to migrate file {$relative}: ".$e->getMessage());
     }
 
     return NULL;
@@ -257,15 +265,32 @@ class D7Migrator {
       if (!$src) continue;
 
       $parsed = parse_url($src);
-      $url = isset($parsed['host']) ? $src : rtrim($this->filesBaseUrl,'/').'/'.ltrim($src,'/');
+      $isUrl = preg_match('#^https?://#', $this->filesBasePath);
 
       try {
-        $response = $this->httpClient->get($url,['stream'=>true,'timeout'=>30]);
-        if ($response->getStatusCode() !== 200) continue;
-        $data = $response->getBody()->getContents();
+        // Determine the file path/URL
+        if (isset($parsed['host'])) {
+          // Image src already has full URL
+          $fullPath = $src;
+        } else {
+          // Relative path
+          $fullPath = rtrim($this->filesBasePath,'/').'/'.ltrim($src,'/');
+        }
 
-        $basename = basename(parse_url($url, PHP_URL_PATH));
-        $destination = rtrim($this->destinationPath, '/')."/body_images/{$nid}/{$basename}";
+        // Get file data
+        if ($isUrl || isset($parsed['host'])) {
+          // Download from HTTP URL
+          $response = $this->httpClient->get($fullPath,['stream'=>true,'timeout'=>30]);
+          if ($response->getStatusCode() !== 200) continue;
+          $data = $response->getBody()->getContents();
+        } else {
+          // Copy from local filesystem
+          if (!file_exists($fullPath)) continue;
+          $data = file_get_contents($fullPath);
+        }
+
+        $basename = basename(parse_url($fullPath, PHP_URL_PATH));
+        $destination = "public://body_images/{$nid}/{$basename}";
         $this->fileSystem->prepareDirectory(dirname($destination), FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
         $uri = file_save_data($data,$destination,FILE_EXISTS_RENAME);
         if ($uri) {
@@ -276,7 +301,7 @@ class D7Migrator {
           $changed = TRUE;
         }
       } catch (\Exception $e) {
-        $this->logger->warning('Failed body image '.$url.': '.$e->getMessage());
+        $this->logger->warning('Failed body image '.$src.': '.$e->getMessage());
       }
     }
 

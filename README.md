@@ -42,50 +42,52 @@ vendor/bin/drush cr
 ## Usage
 
 ### Basic Migration
-Run migration (files-base-url required):
+Run migration (files-base-path required):
 ```bash
 vendor/bin/drush d7-migrate:articles \
-  --files-base-url="https://old.example/sites/default/files"
+  --files-base-path="/www/wwwroot/polissya.today/sites/default/files"
 ```
 
 ### Available Options
 
 | Option | Description | Default | Required |
 |--------|-------------|---------|----------|
-| `--files-base-url` | Base HTTP URL to D7 public files | - | Yes |
-| `--destination-path` | Destination path for downloaded files | `public://d7_migrated/` | No |
+| `--files-base-path` | Base path to D7 public files (local path or HTTP URL) | - | Yes |
 | `--limit` | Number of nodes to process (0 = all) | `0` | No |
 | `--update-existing` | Update existing nodes instead of skipping | `FALSE` | No |
 
 ### Examples
 
-**Migrate with custom destination path:**
+**Migrate from local filesystem path:**
 ```bash
 vendor/bin/drush d7-migrate:articles \
-  --files-base-url="https://old.example.com/sites/default/files" \
-  --destination-path="/www/wwwroot/polissya.today/sites/default/files"
+  --files-base-path="/www/wwwroot/polissya.today/sites/default/files"
+```
+
+**Migrate from HTTP URL:**
+```bash
+vendor/bin/drush d7-migrate:articles \
+  --files-base-path="https://old.example.com/sites/default/files"
 ```
 
 **Migrate with limit (for testing):**
 ```bash
 vendor/bin/drush d7-migrate:articles \
-  --files-base-url="https://old.example.com/sites/default/files" \
+  --files-base-path="/www/wwwroot/polissya.today/sites/default/files" \
   --limit=50
 ```
 
 **Update existing migrated nodes:**
 ```bash
 vendor/bin/drush d7-migrate:articles \
-  --files-base-url="https://old.example.com/sites/default/files" \
-  --destination-path="/www/wwwroot/polissya.today/sites/default/files" \
+  --files-base-path="/www/wwwroot/polissya.today/sites/default/files" \
   --update-existing
 ```
 
 **Full example with all options:**
 ```bash
 vendor/bin/drush d7-migrate:articles \
-  --files-base-url="https://old.example.com/sites/default/files" \
-  --destination-path="/www/wwwroot/polissya.today/sites/default/files" \
+  --files-base-path="/www/wwwroot/polissya.today/sites/default/files" \
   --limit=100 \
   --update-existing
 ```
@@ -93,18 +95,18 @@ vendor/bin/drush d7-migrate:articles \
 ## Features
 
 ### Date Preservation
-The module now preserves the original creation and modification dates from Drupal 7:
+The module preserves the original creation and modification dates from Drupal 7:
 - `created` - Original article creation timestamp
 - `changed` - Last modification timestamp
 
 This ensures your migrated articles maintain their original publication dates.
 
-### Custom Destination Path
-By default, files are downloaded to `public://d7_migrated/`, but you can specify any custom path:
-- Use Drupal stream wrappers: `public://custom/path/`
-- Use absolute filesystem paths: `/www/wwwroot/polissya.today/sites/default/files`
+### Flexible File Source
+The `--files-base-path` option accepts both local filesystem paths and HTTP URLs:
+- **Local filesystem path**: `/www/wwwroot/polissya.today/sites/default/files`
+- **HTTP URL**: `https://old.example.com/sites/default/files`
 
-Files maintain their original directory structure relative to the destination path.
+Files are automatically copied from the source (local or remote) to the current Drupal 11 installation's `public://` files directory, maintaining the original directory structure.
 
 ### Update Existing Nodes
 Use `--update-existing` to re-migrate articles that were already imported:
