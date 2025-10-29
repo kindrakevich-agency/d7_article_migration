@@ -39,4 +39,26 @@ final class MigrateArticlesCommands extends DrushCommands {
     $this->io()->success('D7 Article migration finished.');
     return 0;
   }
+
+  /**
+   * Clear all migrated articles, taxonomy terms, and files.
+   *
+   * @command d7-migrate:clear
+   * @usage d7-migrate:clear
+   *   Delete all migrated content (nodes, terms, files, aliases)
+   */
+  public function clear() {
+    $migrator = \Drupal::service('d7_article_migrate.migrator');
+
+    if (!$this->io()->confirm('Are you sure you want to delete ALL migrated articles, taxonomy terms, and files? This cannot be undone!')) {
+      $this->io()->warning('Clear operation cancelled.');
+      return 1;
+    }
+
+    $this->io()->note('Clearing all migrated content...');
+    $migrator->clearMigratedContent();
+
+    $this->io()->success('All migrated content has been cleared.');
+    return 0;
+  }
 }

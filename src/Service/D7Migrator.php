@@ -144,6 +144,10 @@ class D7Migrator {
           if ($image_fids) $node->set('field_image', array_map(fn($fid)=>['target_id'=>$fid],$image_fids));
           $node->save();
           $new_nid = $node->id();
+
+          // Update alias for existing node
+          $this->migrateAliasFor('node',$nid,$new_nid);
+
           $this->logger->info("Updated D7 nid {$nid} -> D11 nid {$new_nid}");
         } else {
           $this->logger->warning("Could not load node {$already} for update");
@@ -320,20 +324,131 @@ class D7Migrator {
     return $body;
   }
 
+  public function clearMigratedContent() {
+    $this->logger->info("Starting to clear all migrated content...");
+
+    // Get all migrated nodes
+    $node_map = $this->database->select('d7_article_migrate_map','m')
+      ->fields('m',['dest_id'])
+      ->condition('type','node')
+      ->execute()
+      ->fetchCol();
+
+    // Delete nodes and their files
+    foreach ($node_map as $nid) {
+      $node = Node::load($nid);
+      if ($node) {
+        // Delete files attached to field_image
+        if ($node->hasField('field_image') && !$node->get('field_image')->isEmpty()) {
+          foreach ($node->get('field_image') as $item) {
+            if ($item->entity) {
+              $file = $item->entity;
+              $this->logger->info("Deleting image file: " . $file->getFilename());
+              $file->delete();
+            }
+          }
+        }
+
+        // Delete body images (files in public://body_images/{nid}/)
+        $body_images_dir = "public://body_images/{$nid}";
+        if ($this->fileSystem->prepareDirectory($body_images_dir)) {
+          $files = $this->fileSystem->scanDirectory($body_images_dir, '/.*/');
+          foreach ($files as $file) {
+            $file_entity = $this->entityTypeManager->getStorage('file')->loadByProperties(['uri' => $file->uri]);
+            if ($file_entity) {
+              $file_entity = reset($file_entity);
+              $this->logger->info("Deleting body image file: " . $file_entity->getFilename());
+              $file_entity->delete();
+            }
+          }
+          // Remove directory
+          $this->fileSystem->deleteRecursive($body_images_dir);
+        }
+
+        // Delete path aliases
+        $path_alias_storage = \Drupal::entityTypeManager()->getStorage('path_alias');
+        $aliases = $path_alias_storage->loadByProperties(['path' => "/node/{$nid}"]);
+        foreach ($aliases as $alias) {
+          $alias->delete();
+          $this->logger->info("Deleted alias for node {$nid}");
+        }
+
+        $this->logger->info("Deleting node {$nid}: " . $node->label());
+        $node->delete();
+      }
+    }
+
+    // Get all migrated terms
+    $term_map = $this->database->select('d7_article_migrate_map','m')
+      ->fields('m',['dest_id'])
+      ->condition('type','term')
+      ->execute()
+      ->fetchCol();
+
+    // Delete terms
+    foreach ($term_map as $tid) {
+      $term = Term::load($tid);
+      if ($term) {
+        // Delete path aliases
+        $path_alias_storage = \Drupal::entityTypeManager()->getStorage('path_alias');
+        $aliases = $path_alias_storage->loadByProperties(['path' => "/taxonomy/term/{$tid}"]);
+        foreach ($aliases as $alias) {
+          $alias->delete();
+          $this->logger->info("Deleted alias for term {$tid}");
+        }
+
+        $this->logger->info("Deleting term {$tid}: " . $term->label());
+        $term->delete();
+      }
+    }
+
+    // Get all migrated files (field images)
+    $file_map = $this->database->select('d7_article_migrate_map','m')
+      ->fields('m',['dest_id'])
+      ->condition('type','file')
+      ->execute()
+      ->fetchCol();
+
+    // Delete files
+    foreach ($file_map as $fid) {
+      $file = File::load($fid);
+      if ($file) {
+        $this->logger->info("Deleting file {$fid}: " . $file->getFilename());
+        $file->delete();
+      }
+    }
+
+    // Clear the migration map
+    $this->database->truncate('d7_article_migrate_map')->execute();
+
+    $this->logger->info("All migrated content has been cleared.");
+    $this->logger->info("Deleted: " . count($node_map) . " nodes, " . count($term_map) . " terms, " . count($file_map) . " files");
+  }
+
   protected function migrateAliasFor(string $entity_type,$old_id,$new_id) {
     $source = $this->getSourceDb();
     $path = $entity_type === 'node' ? "node/{$old_id}" : "taxonomy/term/{$old_id}";
-    $alias = $source->select('url_alias','ua')->fields('ua',['alias'])->condition('source',$path)->execute()->fetchField();
-    if ($alias) {
+    $alias_row = $source->select('url_alias','ua')
+      ->fields('ua',['alias','language'])
+      ->condition('source',$path)
+      ->execute()
+      ->fetchObject();
+
+    if ($alias_row) {
+      $alias = $alias_row->alias;
+      $langcode = $alias_row->language ?? \Drupal::languageManager()->getDefaultLanguage()->getId();
+
       // avoid duplicate aliases
       $existing = \Drupal::entityTypeManager()->getStorage('path_alias')->loadByProperties(['alias'=>'/'.$alias]);
       if (!$existing) {
         PathAlias::create([
-          'path' => ($entity_type === 'node') ? "node/{$new_id}" : "taxonomy/term/{$new_id}",
+          'path' => ($entity_type === 'node') ? "/node/{$new_id}" : "/taxonomy/term/{$new_id}",
           'alias' => '/'.ltrim($alias,'/'),
-          'langcode' => 'und',
+          'langcode' => $langcode,
         ])->save();
         $this->logger->info("Migrated alias {$alias} for {$entity_type} {$new_id}");
+      } else {
+        $this->logger->notice("Alias {$alias} already exists, skipping");
       }
     }
   }

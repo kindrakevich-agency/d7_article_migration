@@ -92,6 +92,25 @@ vendor/bin/drush d7-migrate:articles \
   --update-existing
 ```
 
+### Clear Migrated Content
+
+**WARNING: This command will delete ALL migrated content and cannot be undone!**
+
+Clear all migrated articles, taxonomy terms, files, and path aliases:
+```bash
+vendor/bin/drush d7-migrate:clear
+```
+
+This command will:
+- Delete all migrated article nodes
+- Delete all files attached to field_image
+- Delete all body images (public://body_images/)
+- Delete all migrated taxonomy terms
+- Delete all migrated path aliases
+- Clear the migration map table
+
+The command requires confirmation before proceeding.
+
 ## Features
 
 ### Date Preservation
@@ -108,11 +127,20 @@ The `--files-base-path` option accepts both local filesystem paths and HTTP URLs
 
 Files are automatically copied from the source (local or remote) to the current Drupal 11 installation's `public://` files directory, maintaining the original directory structure.
 
+### URL Alias Preservation
+The module automatically migrates URL aliases from Drupal 7 for both articles and taxonomy terms:
+- Preserves original D7 path aliases
+- Uses the language code from D7 (or site default if not set)
+- Prevents duplicate aliases
+- Works for both new migrations and updates with `--update-existing`
+- Deletes aliases when using `d7-migrate:clear` command
+
 ### Update Existing Nodes
 Use `--update-existing` to re-migrate articles that were already imported:
 - Updates all node fields (title, body, tags, images, dates)
+- Updates or creates path aliases
 - Useful for fixing corrupted imports or updating content
-- Does not create duplicate path aliases or mapping entries
+- Does not create duplicate mapping entries
 - Logs updates separately from new migrations
 
 ## Notes
