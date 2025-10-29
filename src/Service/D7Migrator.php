@@ -127,6 +127,9 @@ class D7Migrator {
         if ($file_id) $image_fids[] = $file_id;
       }
 
+      // Clean body HTML (remove class, style attributes)
+      $body = $this->cleanBodyHtml($body);
+
       // Process body images
       $body = $this->processBodyImages($body,$nid);
 
@@ -262,6 +265,46 @@ class D7Migrator {
     }
 
     return NULL;
+  }
+
+  protected function cleanBodyHtml(string $body): string {
+    if (!$body) return $body;
+
+    libxml_use_internal_errors(true);
+    $dom = new \DOMDocument();
+    $dom->loadHTML(mb_convert_encoding($body,'HTML-ENTITIES','UTF-8'), LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+
+    // Get all elements in the document
+    $xpath = new \DOMXPath($dom);
+    $elements = $xpath->query('//*[@class or @style]');
+
+    $cleaned_count = 0;
+    foreach ($elements as $element) {
+      // Remove class attribute
+      if ($element->hasAttribute('class')) {
+        $element->removeAttribute('class');
+        $cleaned_count++;
+      }
+      // Remove style attribute
+      if ($element->hasAttribute('style')) {
+        $element->removeAttribute('style');
+        $cleaned_count++;
+      }
+    }
+
+    if ($cleaned_count > 0) {
+      $bodyNode = $dom->getElementsByTagName('body')->item(0);
+      if ($bodyNode) {
+        $inner = '';
+        foreach ($bodyNode->childNodes as $child) {
+          $inner .= $dom->saveHTML($child);
+        }
+        $this->logger->info("Cleaned {$cleaned_count} class/style attributes from body HTML");
+        return $inner;
+      }
+    }
+
+    return $body;
   }
 
   protected function processBodyImages(string $body,$nid): string {
