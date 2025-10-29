@@ -272,36 +272,60 @@ class D7Migrator {
 
     libxml_use_internal_errors(true);
     $dom = new \DOMDocument();
-    $dom->loadHTML(mb_convert_encoding($body,'HTML-ENTITIES','UTF-8'), LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    $dom->loadHTML(mb_convert_encoding($body,'HTML-ENTITIES','UTF-8'));
 
-    // Get all elements in the document
     $xpath = new \DOMXPath($dom);
-    $elements = $xpath->query('//*[@class or @style]');
-
     $cleaned_count = 0;
-    foreach ($elements as $element) {
-      // Remove class attribute
-      if ($element->hasAttribute('class')) {
-        $element->removeAttribute('class');
-        $cleaned_count++;
+
+    // Remove unwanted attributes from all elements
+    $all_elements = $xpath->query('//*');
+    foreach ($all_elements as $element) {
+      $attributes_to_remove = ['class', 'style', 'dir'];
+
+      foreach ($attributes_to_remove as $attr) {
+        if ($element->hasAttribute($attr)) {
+          $element->removeAttribute($attr);
+          $cleaned_count++;
+        }
       }
-      // Remove style attribute
-      if ($element->hasAttribute('style')) {
-        $element->removeAttribute('style');
-        $cleaned_count++;
+
+      // Remove Google Docs internal IDs
+      if ($element->hasAttribute('id')) {
+        $id_value = $element->getAttribute('id');
+        if (strpos($id_value, 'docs-internal-guid-') === 0) {
+          $element->removeAttribute('id');
+          $cleaned_count++;
+        }
       }
     }
 
-    if ($cleaned_count > 0) {
-      $bodyNode = $dom->getElementsByTagName('body')->item(0);
-      if ($bodyNode) {
-        $inner = '';
-        foreach ($bodyNode->childNodes as $child) {
-          $inner .= $dom->saveHTML($child);
-        }
-        $this->logger->info("Cleaned {$cleaned_count} class/style attributes from body HTML");
-        return $inner;
+    // Remove empty paragraphs and divs (containing only &nbsp; or whitespace)
+    $empty_elements = $xpath->query('//p[normalize-space(translate(., " ", "")) = "" or normalize-space() = ""] | //div[normalize-space(translate(., " ", "")) = "" or normalize-space() = ""]');
+    $removed_count = 0;
+    foreach ($empty_elements as $element) {
+      // Check if element only contains nbsp or whitespace
+      $text_content = $element->textContent;
+      $normalized = trim(str_replace(['&nbsp;', ' ', "\n", "\r", "\t"], '', $text_content));
+
+      if (empty($normalized)) {
+        $element->parentNode->removeChild($element);
+        $removed_count++;
       }
+    }
+
+    // Extract cleaned body content
+    $bodyNode = $dom->getElementsByTagName('body')->item(0);
+    if ($bodyNode) {
+      $inner = '';
+      foreach ($bodyNode->childNodes as $child) {
+        $inner .= $dom->saveHTML($child);
+      }
+
+      if ($cleaned_count > 0 || $removed_count > 0) {
+        $this->logger->info("Cleaned {$cleaned_count} attributes and removed {$removed_count} empty elements from body HTML");
+      }
+
+      return $inner;
     }
 
     return $body;
