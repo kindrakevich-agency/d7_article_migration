@@ -271,48 +271,80 @@ class D7Migrator {
     $dom->loadHTML(mb_convert_encoding($body,'HTML-ENTITIES','UTF-8'));
     $imgs = $dom->getElementsByTagName('img');
     $changed = FALSE;
+    $toRemove = [];
+
     foreach ($imgs as $img) {
       $src = $img->getAttribute('src');
       if (!$src) continue;
 
       $parsed = parse_url($src);
-      $isUrl = preg_match('#^https?://#', $this->filesBasePath);
+      $isSourceUrl = preg_match('#^https?://#', $this->filesBasePath);
 
       try {
         // Determine the file path/URL
         if (isset($parsed['host'])) {
-          // Image src already has full URL
+          // Image src already has full URL (e.g., http://example.com/image.jpg)
           $fullPath = $src;
+          $isRemoteImage = true;
         } else {
-          // Relative path
-          $fullPath = rtrim($this->filesBasePath,'/').'/'.ltrim($src,'/');
+          // Relative path (e.g., /sites/default/files/inline/images/image.jpg)
+          // Strip common Drupal path prefixes to get the relative file path
+          $relativePath = $src;
+          $relativePath = preg_replace('#^/?(sites/default/files/|public://)#', '', $relativePath);
+
+          // Construct full path
+          $fullPath = rtrim($this->filesBasePath,'/').'/'.ltrim($relativePath,'/');
+          $isRemoteImage = $isSourceUrl;
         }
 
+        $this->logger->info("Processing body image: {$src} -> {$fullPath}");
+
         // Get file data
-        if ($isUrl || isset($parsed['host'])) {
+        if ($isRemoteImage) {
           // Download from HTTP URL
           $response = $this->httpClient->get($fullPath,['stream'=>true,'timeout'=>30]);
-          if ($response->getStatusCode() !== 200) continue;
+          if ($response->getStatusCode() !== 200) {
+            throw new \Exception("HTTP {$response->getStatusCode()}");
+          }
           $data = $response->getBody()->getContents();
         } else {
           // Copy from local filesystem
-          if (!file_exists($fullPath)) continue;
+          if (!file_exists($fullPath)) {
+            throw new \Exception("File not found: {$fullPath}");
+          }
           $data = file_get_contents($fullPath);
+          if ($data === false) {
+            throw new \Exception("Failed to read file");
+          }
         }
 
+        // Save to Drupal 11
         $basename = basename(parse_url($fullPath, PHP_URL_PATH));
         $destination = "public://body_images/{$nid}/{$basename}";
         $this->fileSystem->prepareDirectory(dirname($destination), FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
         $file = $this->fileRepository->writeData($data, $destination, FileSystemInterface::EXISTS_RENAME);
+
         if ($file) {
           $file->setPermanent();
           $file->save();
-          $img->setAttribute('src', $this->fileUrlGenerator->generateAbsoluteString($file->getFileUri()));
+          $new_url = $this->fileUrlGenerator->generateAbsoluteString($file->getFileUri());
+          $img->setAttribute('src', $new_url);
           $changed = TRUE;
+          $this->logger->info("Migrated body image: {$src} -> {$new_url}");
+        } else {
+          throw new \Exception("Failed to save file");
         }
       } catch (\Exception $e) {
-        $this->logger->warning('Failed body image '.$src.': '.$e->getMessage());
+        $this->logger->warning("Failed to migrate body image '{$src}': {$e->getMessage()} - removing from body");
+        // Mark image for removal
+        $toRemove[] = $img;
+        $changed = TRUE;
       }
+    }
+
+    // Remove failed images from DOM
+    foreach ($toRemove as $img) {
+      $img->parentNode->removeChild($img);
     }
 
     if ($changed) {
