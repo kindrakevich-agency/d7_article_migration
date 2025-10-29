@@ -300,12 +300,33 @@ class D7Migrator {
     }
 
     // Remove empty paragraphs and divs (containing only &nbsp; or whitespace)
-    $empty_elements = $xpath->query('//p[normalize-space(translate(., " ", "")) = "" or normalize-space() = ""] | //div[normalize-space(translate(., " ", "")) = "" or normalize-space() = ""]');
+    // But preserve elements that contain child elements like images, links, etc.
+    $empty_elements = $xpath->query('//p | //div | //span');
     $removed_count = 0;
     foreach ($empty_elements as $element) {
-      // Check if element only contains nbsp or whitespace
+      // Skip if element has child elements (img, a, strong, em, etc.)
+      if ($element->hasChildNodes()) {
+        $has_element_children = false;
+        foreach ($element->childNodes as $child) {
+          if ($child->nodeType === XML_ELEMENT_NODE) {
+            $has_element_children = true;
+            break;
+          }
+        }
+        // If has child elements (like img), keep it
+        if ($has_element_children) {
+          continue;
+        }
+      }
+
+      // Get text content and check if it's empty or only whitespace/nbsp
       $text_content = $element->textContent;
-      $normalized = trim(str_replace(['&nbsp;', ' ', "\n", "\r", "\t"], '', $text_content));
+
+      // Replace non-breaking spaces (U+00A0) with regular spaces
+      $text_content = str_replace("\xc2\xa0", ' ', $text_content);
+
+      // Trim and check if empty
+      $normalized = trim($text_content);
 
       if (empty($normalized)) {
         $element->parentNode->removeChild($element);
