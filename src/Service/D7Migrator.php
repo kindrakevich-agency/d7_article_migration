@@ -327,7 +327,8 @@ class D7Migrator {
         if ($file) {
           $file->setPermanent();
           $file->save();
-          $new_url = $this->fileUrlGenerator->generateAbsoluteString($file->getFileUri());
+          // Use relative URL without domain name
+          $new_url = $this->fileUrlGenerator->generateString($file->getFileUri());
           $img->setAttribute('src', $new_url);
           $changed = TRUE;
           $this->logger->info("Migrated body image: {$src} -> {$new_url}");
