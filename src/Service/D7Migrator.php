@@ -426,30 +426,49 @@ class D7Migrator {
   }
 
   protected function migrateAliasFor(string $entity_type,$old_id,$new_id) {
-    $source = $this->getSourceDb();
-    $path = $entity_type === 'node' ? "node/{$old_id}" : "taxonomy/term/{$old_id}";
-    $alias_row = $source->select('url_alias','ua')
-      ->fields('ua',['alias','language'])
-      ->condition('source',$path)
-      ->execute()
-      ->fetchObject();
+    try {
+      $source = $this->getSourceDb();
+      $path = $entity_type === 'node' ? "node/{$old_id}" : "taxonomy/term/{$old_id}";
 
-    if ($alias_row) {
-      $alias = $alias_row->alias;
-      $langcode = $alias_row->language ?? \Drupal::languageManager()->getDefaultLanguage()->getId();
+      // Query D7 url_alias table
+      $query = $source->select('url_alias','ua')
+        ->fields('ua',['alias','language'])
+        ->condition('source',$path);
 
-      // avoid duplicate aliases
-      $existing = \Drupal::entityTypeManager()->getStorage('path_alias')->loadByProperties(['alias'=>'/'.$alias]);
-      if (!$existing) {
-        PathAlias::create([
-          'path' => ($entity_type === 'node') ? "/node/{$new_id}" : "/taxonomy/term/{$new_id}",
-          'alias' => '/'.ltrim($alias,'/'),
-          'langcode' => $langcode,
-        ])->save();
-        $this->logger->info("Migrated alias {$alias} for {$entity_type} {$new_id}");
-      } else {
-        $this->logger->notice("Alias {$alias} already exists, skipping");
+      $alias_row = $query->execute()->fetchObject();
+
+      if (!$alias_row) {
+        // Debug level - only shows with --verbose
+        $this->logger->debug("No alias found in D7 for {$entity_type} {$old_id} (path: {$path})");
+        return;
       }
+
+      $alias = $alias_row->alias;
+      $langcode = !empty($alias_row->language) && $alias_row->language !== 'und'
+        ? $alias_row->language
+        : \Drupal::languageManager()->getDefaultLanguage()->getId();
+
+      // Info level - always shows
+      $this->logger->info("Found D7 alias: {$alias} for {$entity_type} {$old_id}, migrating to {$new_id}");
+
+      // Check for duplicate aliases
+      $existing = \Drupal::entityTypeManager()->getStorage('path_alias')->loadByProperties(['alias'=>'/'.$alias]);
+      if ($existing) {
+        $this->logger->notice("Alias /{$alias} already exists in D11, skipping {$entity_type} {$new_id}");
+        return;
+      }
+
+      // Create the path alias
+      $path_alias = PathAlias::create([
+        'path' => ($entity_type === 'node') ? "/node/{$new_id}" : "/taxonomy/term/{$new_id}",
+        'alias' => '/'.ltrim($alias,'/'),
+        'langcode' => $langcode,
+      ]);
+      $path_alias->save();
+
+      $this->logger->info("Migrated alias /{$alias} for {$entity_type} {$old_id} -> {$new_id}");
+    } catch (\Exception $e) {
+      $this->logger->error("Failed to migrate alias for {$entity_type} {$old_id}: " . $e->getMessage());
     }
   }
 
