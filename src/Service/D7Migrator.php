@@ -21,6 +21,8 @@ class D7Migrator {
   protected LoggerInterface $logger;
   protected Connection $database;
   protected string $filesBaseUrl;
+  protected string $destinationPath = 'public://d7_migrated';
+  protected bool $updateExisting = FALSE;
   protected ?Connection $sourceDb = NULL;
 
   public function __construct(
@@ -39,6 +41,14 @@ class D7Migrator {
 
   public function setFilesBaseUrl(string $url) {
     $this->filesBaseUrl = $url;
+  }
+
+  public function setDestinationPath(string $path) {
+    $this->destinationPath = $path;
+  }
+
+  public function setUpdateExisting(bool $update) {
+    $this->updateExisting = $update;
   }
 
   public function setSourceConnectionKey(string $key) {
@@ -72,14 +82,14 @@ class D7Migrator {
         continue;
       }
 
-      // Skip already migrated
+      // Check if already migrated
       $already = $this->database->select('d7_article_migrate_map','m')
         ->fields('m',['dest_id'])
         ->condition('type','node')
         ->condition('source_id',(string)$nid)
         ->execute()
         ->fetchField();
-      if ($already) {
+      if ($already && !$this->updateExisting) {
         $this->logger->notice("Skipping nid {$nid} — already migrated to {$already}.");
         continue;
       }
@@ -117,23 +127,46 @@ class D7Migrator {
       // Process body images
       $body = $this->processBodyImages($body,$nid);
 
-      // Create node
-      $node = Node::create([
-        'type'=>'article',
-        'title'=>$row->title,
-        'body'=>['value'=>$body,'format'=>'full_html'],
-        'status'=>1,
-      ]);
-      if ($term_ids) $node->set('field_tags', array_map(fn($tid)=>['target_id'=>$tid],$term_ids));
-      if ($image_fids) $node->set('field_image', array_map(fn($fid)=>['target_id'=>$fid],$image_fids));
-      $node->save();
-      $new_nid = $node->id();
+      // Create or update node
+      if ($already) {
+        // Update existing node
+        $node = Node::load($already);
+        if ($node) {
+          $node->set('title', $row->title);
+          $node->set('body', ['value'=>$body,'format'=>'full_html']);
+          $node->set('status', 1);
+          $node->set('created', $row->created);
+          $node->set('changed', $row->changed);
+          if ($term_ids) $node->set('field_tags', array_map(fn($tid)=>['target_id'=>$tid],$term_ids));
+          if ($image_fids) $node->set('field_image', array_map(fn($fid)=>['target_id'=>$fid],$image_fids));
+          $node->save();
+          $new_nid = $node->id();
+          $this->logger->info("Updated D7 nid {$nid} -> D11 nid {$new_nid}");
+        } else {
+          $this->logger->warning("Could not load node {$already} for update");
+          continue;
+        }
+      } else {
+        // Create new node
+        $node = Node::create([
+          'type'=>'article',
+          'title'=>$row->title,
+          'body'=>['value'=>$body,'format'=>'full_html'],
+          'status'=>1,
+          'created'=>$row->created,
+          'changed'=>$row->changed,
+        ]);
+        if ($term_ids) $node->set('field_tags', array_map(fn($tid)=>['target_id'=>$tid],$term_ids));
+        if ($image_fids) $node->set('field_image', array_map(fn($fid)=>['target_id'=>$fid],$image_fids));
+        $node->save();
+        $new_nid = $node->id();
 
-      $this->migrateAliasFor('node',$nid,$new_nid);
+        $this->migrateAliasFor('node',$nid,$new_nid);
 
-      $this->database->insert('d7_article_migrate_map')->fields(['type'=>'node','source_id'=>(string)$nid,'dest_id'=>(string)$new_nid])->execute();
+        $this->database->insert('d7_article_migrate_map')->fields(['type'=>'node','source_id'=>(string)$nid,'dest_id'=>(string)$new_nid])->execute();
 
-      $this->logger->info("Migrated D7 nid {$nid} -> D11 nid {$new_nid}");
+        $this->logger->info("Migrated D7 nid {$nid} -> D11 nid {$new_nid}");
+      }
     }
   }
 
@@ -192,7 +225,7 @@ class D7Migrator {
       if ($response->getStatusCode() !== 200) throw new \Exception('Bad status');
 
       $data = $response->getBody()->getContents();
-      $destination = 'public://d7_migrated/'.$relative;
+      $destination = rtrim($this->destinationPath, '/').'/'.$relative;
       $this->fileSystem->prepareDirectory(dirname($destination), FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
       $uri = file_save_data($data,$destination,FILE_EXISTS_REPLACE);
       if ($uri) {
@@ -232,7 +265,7 @@ class D7Migrator {
         $data = $response->getBody()->getContents();
 
         $basename = basename(parse_url($url, PHP_URL_PATH));
-        $destination = "public://d7_migrated/body_images/{$nid}/{$basename}";
+        $destination = rtrim($this->destinationPath, '/')."/body_images/{$nid}/{$basename}";
         $this->fileSystem->prepareDirectory(dirname($destination), FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
         $uri = file_save_data($data,$destination,FILE_EXISTS_RENAME);
         if ($uri) {
