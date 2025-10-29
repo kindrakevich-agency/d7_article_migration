@@ -1,57 +1,49 @@
-# D7 Article Migration Module
+# D7 Article Migrate (Drupal 11)
 
-This module provides a custom batch migration from a Drupal 7 database to Drupal 11.
+## What it does
+This module provides a Drush command to migrate published 'article' nodes from a Drupal 7 database connection defined in `settings.php` under the `'migrate'` key.
 
-## 1. CRITICAL: Database Setup
+It migrates:
+- title
+- body (imports inline <img> images and replaces src)
+- field_image (multiple)
+- field_tags (D7 vocabulary `vid = 3` -> destination vocabulary `tags`)
+- preserves path aliases for nodes and taxonomy terms
+- stores mapping in `d7_article_migrate_map` to avoid duplicate imports
 
-This module **REQUIRES** you to configure a database connection to your Drupal 7 database.
-
-In your Drupal 11 site's `settings.php` file (e.g., `web/sites/default/settings.php`), add a new database connection with the key `migrate`:
-
+## Install
+1. Copy module to `modules/custom/d7_article_migrate`
+2. Add D7 DB connection to `settings.php`:
 ```php
 $databases['migrate']['default'] = [
-  'database' => 'your_d7_database_name',
-  'username' => 'your_d7_db_user',
-  'password' => 'your_d7_db_password',
-  'prefix' => '',
-  'host' => 'your_d7_db_host', // e.g., '127.0.0.1'
-  'port' => '3306',
-  'namespace' => 'Drupal\\Core\\Database\\Driver\\mysql',
   'driver' => 'mysql',
+  'database' => 'drupal7_db',
+  'username' => 'dbuser',
+  'password' => 'dbpass',
+  'host' => '127.0.0.1',
+  'port' => '3306',
+  'prefix' => '',
 ];
 ```
+3. Enable module:
+```
+vendor/bin/drush en d7_article_migrate -y
+```
+4. Clear caches:
+```
+composer dump-autoload
+rm -rf ~/.drush
+vendor/bin/drush cache:clear drush
+vendor/bin/drush cr
+```
 
-**You must do this before installing the module.**
+## Usage
+Run migration (files-base-url required):
+```
+vendor/bin/drush d7-migrate:articles --files-base-url="https://old.example/sites/default/files" --limit=50
+```
+`--limit=0` (default) processes all.
 
-## 2. Drupal 11 Site Setup (Prerequisites)
-
-Before you run the migration, ensure your Drupal 11 site is ready:
-
-1.  **Content Type:** You must have a content type with the machine name `article`.
-2.  **Fields:** The `article` content type must have the following fields:
-    * `field_tags`: An **Entity Reference** field pointing to a Taxonomy Vocabulary.
-    * `field_image`: An **Image** field, configured to allow **multiple** values.
-    * `body`: (This is included by default).
-3.  **Taxonomy:** You must have a Vocabulary. The `d7_taxonomy_tags` migration is set to migrate to a vocabulary named `tags`. If your D11 vocabulary has a different machine name, you **must** edit `config/install/migrate_plus.migration.d7_taxonomy_tags.yml` and change the `bundle` value.
-4.  **Text Formats:** Ensure you have a text format with the machine name `full_html` (this is standard).
-5.  **Modules:** Enable the `path` module to handle URL aliases.
-
-## 3. How to Run the Migration
-
-1.  Install this module (`d7_article_migration`) like any other Drupal module.
-2.  Go to **Configuration** > **Content Authoring** > **D7 Article Migration** (at `/admin/config/content/d7-article-migration`).
-3.  Click the "Start Article Migration" button.
-4.  This will start a batch process that runs all the migrations in the correct order.
-5.  The process is resumable. If it times out or stops, you can run it again, and it will pick up where it left off.
-
-## 4. What This Module Does
-
-* **Creates a Batch:** Uses the Batch API to run migrations, preventing server timeouts.
-* **Filters Published:** Only migrates published nodes (`status = 1`).
-* **Skips Custom Table:** Checks a table named `parser_map` in your D7 database and skips any nodes whose `nid` is present in the `entity_id` column.
-* **Migrates Fields:**
-    * `d7_taxonomy_tags`: Migrates your `tags` taxonomy terms.
-    * `d7_all_image_files`: Migrates all image files from your D7 site.
-    * `d7_article_nodes`: Migrates the `article` nodes, mapping `title`, `field_tags`, `field_image` (multiple), and `body`.
-    * `d7_url_aliases`: Migrates node and term aliases.
-* **Migrates Body Images:** Finds `<img>` tags in the `body` field, migrates the referenced image, and rewrites the `src` attribute to point to the new D11 file path.
+## Notes
+- Ensure site has `article` content type with fields `field_tags` (vocab `tags`) and `field_image`.
+- Test on staging first.

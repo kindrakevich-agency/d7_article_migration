@@ -1,0 +1,9 @@
+name: 'D7 Article Migrator'
+type: module
+description: 'Migrate published articles + field_tags (categories) from Drupal 7 using DB from settings.php.'
+core_version_requirement: ^11
+package: Migration
+version: '1.0.0'
+dependencies:
+  - node
+  - taxonomy

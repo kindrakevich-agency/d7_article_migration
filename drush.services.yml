@@ -1,0 +1,5 @@
+services:
+  d7_article_migrate.commands:
+    class: Drupal\d7_article_migrate\Commands\MigrateArticlesCommands
+    tags:
+      - { name: drush.command }

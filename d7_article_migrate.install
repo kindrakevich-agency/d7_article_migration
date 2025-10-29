@@ -1,0 +1,16 @@
+<?php
+
+function d7_article_migrate_schema() {
+  $schema['d7_article_migrate_map'] = [
+    'description' => 'Mapping table for D7->D11 migrated objects.',
+    'fields' => [
+      'id' => ['type'=>'serial','not null'=>TRUE],
+      'type' => ['type'=>'varchar','length'=>32,'not null'=>TRUE],
+      'source_id' => ['type'=>'varchar','length'=>128,'not null'=>TRUE],
+      'dest_id' => ['type'=>'varchar','length'=>128,'not null'=>TRUE],
+    ],
+    'primary key'=>['id'],
+    'unique keys'=>['type_source'=>['type','source_id']],
+  ];
+  return $schema;
+}
