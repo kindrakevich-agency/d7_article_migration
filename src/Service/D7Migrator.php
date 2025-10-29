@@ -4,6 +4,8 @@ namespace Drupal\d7_article_migrate\Service;
 
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\File\FileSystemInterface;
+use Drupal\file\FileRepositoryInterface;
+use Drupal\Core\File\FileUrlGeneratorInterface;
 use GuzzleHttp\ClientInterface;
 use Psr\Log\LoggerInterface;
 use Drupal\Core\Database\Connection;
@@ -17,6 +19,8 @@ class D7Migrator {
 
   protected EntityTypeManagerInterface $entityTypeManager;
   protected FileSystemInterface $fileSystem;
+  protected FileRepositoryInterface $fileRepository;
+  protected FileUrlGeneratorInterface $fileUrlGenerator;
   protected ClientInterface $httpClient;
   protected LoggerInterface $logger;
   protected Connection $database;
@@ -27,12 +31,16 @@ class D7Migrator {
   public function __construct(
       EntityTypeManagerInterface $etm,
       FileSystemInterface $fs,
+      FileRepositoryInterface $file_repository,
+      FileUrlGeneratorInterface $file_url_generator,
       ClientInterface $http_client,
       LoggerInterface $logger,
       Connection $database
   ) {
     $this->entityTypeManager = $etm;
     $this->fileSystem = $fs;
+    $this->fileRepository = $file_repository;
+    $this->fileUrlGenerator = $file_url_generator;
     $this->httpClient = $http_client;
     $this->logger = $logger;
     $this->database = $database;
@@ -235,9 +243,8 @@ class D7Migrator {
       }
 
       $this->fileSystem->prepareDirectory(dirname($destination), FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
-      $uri = file_save_data($data,$destination,FILE_EXISTS_REPLACE);
-      if ($uri) {
-        $file = File::create(['uri'=>$uri,'filemime'=>$f->filemime]);
+      $file = $this->fileRepository->writeData($data, $destination, FileSystemInterface::EXISTS_REPLACE);
+      if ($file) {
         $file->setPermanent();
         $file->save();
         $new_fid = $file->id();
@@ -292,12 +299,11 @@ class D7Migrator {
         $basename = basename(parse_url($fullPath, PHP_URL_PATH));
         $destination = "public://body_images/{$nid}/{$basename}";
         $this->fileSystem->prepareDirectory(dirname($destination), FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
-        $uri = file_save_data($data,$destination,FILE_EXISTS_RENAME);
-        if ($uri) {
-          $file = File::create(['uri'=>$uri]);
+        $file = $this->fileRepository->writeData($data, $destination, FileSystemInterface::EXISTS_RENAME);
+        if ($file) {
           $file->setPermanent();
           $file->save();
-          $img->setAttribute('src', file_create_url($file->getFileUri()));
+          $img->setAttribute('src', $this->fileUrlGenerator->generateAbsoluteString($file->getFileUri()));
           $changed = TRUE;
         }
       } catch (\Exception $e) {
