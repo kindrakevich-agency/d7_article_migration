@@ -27,6 +27,7 @@ class D7Migrator {
   protected string $filesBasePath;
   protected bool $updateExisting = FALSE;
   protected ?Connection $sourceDb = NULL;
+  protected array $validUserIds = [];
 
   public function __construct(
       EntityTypeManagerInterface $etm,
@@ -61,6 +62,36 @@ class D7Migrator {
   protected function getSourceDb(): Connection {
     if (!$this->sourceDb) throw new \RuntimeException('Source DB not set. Call setSourceConnectionKey() first.');
     return $this->sourceDb;
+  }
+
+  protected function getValidUserIds(): array {
+    // Cache the user IDs to avoid repeated queries
+    if (!empty($this->validUserIds)) {
+      return $this->validUserIds;
+    }
+
+    // Get all active users except admin (uid 1) and anonymous (uid 0)
+    $query = $this->database->select('users_field_data', 'u')
+      ->fields('u', ['uid'])
+      ->condition('u.uid', [0, 1], 'NOT IN')
+      ->condition('u.status', 1);
+
+    $this->validUserIds = $query->execute()->fetchCol();
+
+    if (empty($this->validUserIds)) {
+      $this->logger->warning('No valid users found for author assignment. Articles will be assigned to admin (uid 1).');
+      $this->validUserIds = [1]; // Fallback to admin
+    } else {
+      $this->logger->info('Found ' . count($this->validUserIds) . ' valid users for random author assignment.');
+    }
+
+    return $this->validUserIds;
+  }
+
+  protected function getRandomUserId(): int {
+    $userIds = $this->getValidUserIds();
+    $randomIndex = array_rand($userIds);
+    return (int) $userIds[$randomIndex];
   }
 
   public function migrateArticles(int $limit = 0) {
@@ -133,6 +164,9 @@ class D7Migrator {
       // Process body images
       $body = $this->processBodyImages($body,$nid);
 
+      // Get random author
+      $author_uid = $this->getRandomUserId();
+
       // Create or update node
       if ($already) {
         // Update existing node
@@ -141,6 +175,7 @@ class D7Migrator {
           $node->set('title', $row->title);
           $node->set('body', ['value'=>$body,'format'=>'full_html']);
           $node->set('status', 1);
+          $node->set('uid', $author_uid);
           $node->set('created', $row->created);
           $node->set('changed', $row->changed);
           if ($term_ids) $node->set('field_tags', array_map(fn($tid)=>['target_id'=>$tid],$term_ids));
@@ -151,7 +186,7 @@ class D7Migrator {
           // Update alias for existing node
           $this->migrateAliasFor('node',$nid,$new_nid);
 
-          $this->logger->info("Updated D7 nid {$nid} -> D11 nid {$new_nid}");
+          $this->logger->info("Updated D7 nid {$nid} -> D11 nid {$new_nid} (author: uid {$author_uid})");
         } else {
           $this->logger->warning("Could not load node {$already} for update");
           continue;
@@ -163,6 +198,7 @@ class D7Migrator {
           'title'=>$row->title,
           'body'=>['value'=>$body,'format'=>'full_html'],
           'status'=>1,
+          'uid'=>$author_uid,
           'created'=>$row->created,
           'changed'=>$row->changed,
         ]);
@@ -175,7 +211,7 @@ class D7Migrator {
 
         $this->database->insert('d7_article_migrate_map')->fields(['type'=>'node','source_id'=>(string)$nid,'dest_id'=>(string)$new_nid])->execute();
 
-        $this->logger->info("Migrated D7 nid {$nid} -> D11 nid {$new_nid}");
+        $this->logger->info("Migrated D7 nid {$nid} -> D11 nid {$new_nid} (author: uid {$author_uid})");
       }
     }
   }
