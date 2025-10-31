@@ -30,6 +30,7 @@ class D11Migrator {
   protected string $sourceDbKey = '';
   protected array $domainIds = [];
   protected bool $skipDomainSource = FALSE;
+  protected array $validUserIds = [];
 
   public function __construct(
       EntityTypeManagerInterface $etm,
@@ -75,6 +76,34 @@ class D11Migrator {
     return $this->sourceDb;
   }
 
+  protected function getValidUserIds(): array {
+    // Cache the user IDs to avoid repeated queries
+    if (!empty($this->validUserIds)) {
+      return $this->validUserIds;
+    }
+
+    // Get all active users except admin (uid 1) and anonymous (uid 0)
+    $query = $this->database->select('users_field_data', 'u')
+      ->fields('u', ['uid'])
+      ->condition('u.uid', [0, 1], 'NOT IN')
+      ->condition('u.status', 1);
+
+    $this->validUserIds = $query->execute()->fetchCol();
+
+    if (empty($this->validUserIds)) {
+      $this->logger->warning('No valid users found for author assignment. Articles will be assigned to admin (uid 1).');
+      return [1]; // Fallback to admin
+    }
+
+    return $this->validUserIds;
+  }
+
+  protected function getRandomUserId(): int {
+    $userIds = $this->getValidUserIds();
+    $randomIndex = array_rand($userIds);
+    return (int) $userIds[$randomIndex];
+  }
+
   protected function getMigrationMapTable(): string {
     // Create table name based on source database key
     // Replace special characters with underscores for valid table name
@@ -113,7 +142,7 @@ class D11Migrator {
 
     // Get published article nodes from source D11
     $query = $source->select('node_field_data', 'n')
-      ->fields('n', ['nid', 'title', 'created', 'changed', 'uid'])
+      ->fields('n', ['nid', 'title', 'created', 'changed'])
       ->condition('n.type', 'article')
       ->condition('n.status', 1)
       ->orderBy('n.nid', 'ASC');
@@ -214,6 +243,9 @@ class D11Migrator {
       // Process body images
       $body = $this->processBodyImages($body, $nid);
 
+      // Get random author for article
+      $author_uid = $this->getRandomUserId();
+
       // Create or update node
       if ($already) {
         // Update existing node
@@ -224,7 +256,7 @@ class D11Migrator {
           $node->set('title', $row->title);
           $node->set('body', ['value'=>$body,'format'=>$body_format]);
           $node->set('status', 1);
-          $node->set('uid', $row->uid);
+          $node->set('uid', $author_uid);
           $node->set('created', $row->created);
           $node->set('changed', $row->changed);
           if ($new_tag_ids) $node->set('field_tags', array_map(fn($tid)=>['target_id'=>$tid],$new_tag_ids));
@@ -265,7 +297,7 @@ class D11Migrator {
           'title'=>$row->title,
           'body'=>['value'=>$body,'format'=>$body_format],
           'status'=>1,
-          'uid'=>$row->uid,
+          'uid'=>$author_uid,
           'created'=>$row->created,
           'changed'=>$row->changed,
         ]);

@@ -20,7 +20,8 @@ Database connections are defined in `settings.php`.
 ### D11 to D11 Migration Features:
 - title, body (imports inline <img> images with relative URLs)
 - field_image (multiple), field_tags, field_video (converts to iframe in body)
-- creation and modification dates (created, changed), uid (preserves user ID)
+- creation and modification dates (created, changed)
+- assigns random authors to migrated articles (excludes admin and anonymous)
 - preserves path aliases for nodes and taxonomy terms
 - stores mapping in source-specific tables (`d11_migrate_map_{source_db_key}`) to support multiple D11 sources
 - supports updating existing migrated nodes with `--update-existing` option
@@ -224,7 +225,8 @@ From source Drupal 11 site:
   - `field_image` (multiple images)
   - `field_tags` (taxonomy terms from tags vocabulary)
   - `field_video` (Video Embed field - converted to iframe in body)
-- **Metadata**: `created`, `changed`, `uid` (user ID preserved)
+- **Metadata**: `created`, `changed`
+- **Authors**: Random author assignment (excludes admin uid 1 and anonymous uid 0)
 - **Taxonomy**: Terms from the tags vocabulary
 - **Path aliases**: URL aliases for nodes and taxonomy terms
 - **Domains**: Optional assignment to domain(s) via field_domain_access
