@@ -5,13 +5,15 @@ This module provides a Drush command to migrate published 'article' nodes from a
 
 It migrates:
 - title
-- body (imports inline <img> images and replaces src)
+- body (imports inline <img> images with relative URLs, cleans HTML)
 - field_image (multiple)
-- field_tags (D7 vocabulary `vid = 3` -> destination vocabulary `tags`)
+- field_tags (D7 vocabulary `vid = 3` -> destination vocabulary `tags`, excludes "Новини")
 - creation and modification dates (created, changed)
+- assigns random authors to migrated articles
 - preserves path aliases for nodes and taxonomy terms
 - stores mapping in `d7_article_migrate_map` to avoid duplicate imports
 - supports updating existing migrated nodes with `--update-existing` option
+- supports assigning articles to multiple domains with `--domains` option
 
 ## Install
 1. Copy module to `modules/custom/d7_article_migrate`
@@ -55,6 +57,7 @@ vendor/bin/drush d7-migrate:articles \
 | `--files-base-path` | Base path to D7 public files (local path or HTTP URL) | - | Yes |
 | `--limit` | Number of nodes to process (0 = all) | `0` | No |
 | `--update-existing` | Update existing nodes instead of skipping | `FALSE` | No |
+| `--domains` | Comma-separated list of domain IDs for Domain module (e.g., `new.polissya.today,polissya.today`) | - | No |
 
 ### Examples
 
@@ -84,12 +87,20 @@ vendor/bin/drush d7-migrate:articles \
   --update-existing
 ```
 
+**Assign articles to multiple domains:**
+```bash
+vendor/bin/drush d7-migrate:articles \
+  --files-base-path="/www/wwwroot/polissya.today/sites/default/files" \
+  --domains="new.polissya.today,polissya.today"
+```
+
 **Full example with all options:**
 ```bash
 vendor/bin/drush d7-migrate:articles \
   --files-base-path="/www/wwwroot/polissya.today/sites/default/files" \
   --limit=100 \
-  --update-existing
+  --update-existing \
+  --domains="new.polissya.today,polissya.today"
 ```
 
 ### Clear Migrated Content
@@ -143,7 +154,37 @@ Use `--update-existing` to re-migrate articles that were already imported:
 - Does not create duplicate mapping entries
 - Logs updates separately from new migrations
 
+### HTML Cleanup
+The module automatically cleans up body HTML during migration:
+- Removes unwanted attributes: `class`, `style`, `dir`
+- Removes Google Docs internal IDs (`docs-internal-guid-*`)
+- Removes empty paragraphs and divs (containing only whitespace or &nbsp;)
+- Preserves elements containing child elements like images and links
+- Converts all non-breaking spaces (`&nbsp;`) to regular spaces
+- Uses relative URLs for body images (without domain)
+
+### Random Author Assignment
+Articles are automatically assigned random authors during migration:
+- Selects from all active users (excluding admin uid 1 and anonymous uid 0)
+- Each article gets a randomly selected author
+- Falls back to admin if no valid users are found
+- Helps distribute content ownership across the editorial team
+
+### Tag Exclusions
+The module excludes specific tags during migration:
+- "Новини" tag is automatically excluded
+- Other tags from D7 vocabulary `vid = 3` are migrated to destination vocabulary `tags`
+
+### Domain Module Integration
+Use `--domains` option to assign articles to multiple domains:
+- Requires the Domain module to be installed and configured
+- Articles will be assigned to the `field_domain_access` field
+- Supports multiple domains (comma-separated list)
+- Works with both new migrations and `--update-existing`
+- Example: `--domains="new.polissya.today,polissya.today"`
+
 ## Notes
 - Ensure site has `article` content type with fields `field_tags` (vocab `tags`) and `field_image`.
+- For domain assignment, ensure the Domain module is installed and `field_domain_access` field exists.
 - Test on staging first.
 - The `--update-existing` option will overwrite existing content, use with caution.
