@@ -345,7 +345,8 @@ class D7Migrator {
 
     libxml_use_internal_errors(true);
     $dom = new \DOMDocument();
-    $dom->loadHTML(mb_convert_encoding($body,'HTML-ENTITIES','UTF-8'));
+    // Use XML encoding declaration instead of deprecated mb_convert_encoding
+    $dom->loadHTML('<?xml encoding="UTF-8">' . $body, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
 
     $xpath = new \DOMXPath($dom);
     $cleaned_count = 0;
@@ -436,7 +437,8 @@ class D7Migrator {
     if (!$body) return $body;
     libxml_use_internal_errors(true);
     $dom = new \DOMDocument();
-    $dom->loadHTML(mb_convert_encoding($body,'HTML-ENTITIES','UTF-8'));
+    // Use XML encoding declaration instead of deprecated mb_convert_encoding
+    $dom->loadHTML('<?xml encoding="UTF-8">' . $body, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
     $imgs = $dom->getElementsByTagName('img');
     $changed = FALSE;
     $toRemove = [];
