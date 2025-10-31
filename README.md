@@ -178,13 +178,16 @@ The module excludes specific tags during migration:
 ### Domain Module Integration
 Use `--domains` option to assign articles to multiple domains:
 - Requires the Domain module to be installed and configured
-- Articles will be assigned to the `field_domain_access` field
+- Articles will be assigned to the `field_domain_access` field (all domains)
+- The first domain in the list is set as `field_domain_source` (canonical/primary domain)
 - Supports multiple domains (comma-separated list)
 - Works with both new migrations and `--update-existing`
 - Example: `--domains="new.polissya.today,polissya.today"`
+  - `field_domain_access`: both domains
+  - `field_domain_source`: new.polissya.today (first domain)
 
 ## Notes
 - Ensure site has `article` content type with fields `field_tags` (vocab `tags`) and `field_image`.
-- For domain assignment, ensure the Domain module is installed and `field_domain_access` field exists.
+- For domain assignment, ensure the Domain module is installed and `field_domain_access` and `field_domain_source` fields exist.
 - Test on staging first.
 - The `--update-existing` option will overwrite existing content, use with caution.

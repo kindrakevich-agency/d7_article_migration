@@ -193,6 +193,12 @@ class D7Migrator {
             if ($node->hasField('field_domain_access')) {
               $node->set('field_domain_access', $this->domainIds);
               $this->logger->info("Assigned domains to node {$already}: " . implode(', ', $this->domainIds));
+
+              // Set the first domain as the source domain (canonical domain)
+              if ($node->hasField('field_domain_source')) {
+                $node->set('field_domain_source', $this->domainIds[0]);
+                $this->logger->info("Set source domain for node {$already}: " . $this->domainIds[0]);
+              }
             } else {
               $this->logger->warning("Node {$already} does not have field_domain_access field. Domain assignment skipped.");
             }
@@ -229,6 +235,12 @@ class D7Migrator {
           if ($node->hasField('field_domain_access')) {
             $node->set('field_domain_access', $this->domainIds);
             $this->logger->info("Assigned domains to new node for D7 nid {$nid}: " . implode(', ', $this->domainIds));
+
+            // Set the first domain as the source domain (canonical domain)
+            if ($node->hasField('field_domain_source')) {
+              $node->set('field_domain_source', $this->domainIds[0]);
+              $this->logger->info("Set source domain for new node D7 nid {$nid}: " . $this->domainIds[0]);
+            }
           } else {
             $this->logger->warning("New node for D7 nid {$nid} does not have field_domain_access field. Domain assignment skipped.");
           }
