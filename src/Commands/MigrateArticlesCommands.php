@@ -16,7 +16,7 @@ final class MigrateArticlesCommands extends DrushCommands {
    * @option files-base-path Base path to D7 public files (e.g. /www/wwwroot/polissya.today/sites/default/files or https://oldsite/sites/default/files)
    * @option limit Number of nodes to process (0 = all)
    * @option update-existing Update existing nodes instead of skipping them
-   * @option domains Comma-separated list of domain IDs to assign articles to (e.g. new.polissya.today,polissya.today)
+   * @option domains Comma-separated list of domain machine names to assign articles to (e.g. new_polissya_today,polissya_today)
    * @option skip-domain-source Skip setting field_domain_source (canonical domain)
    */
   public function migrate(array $options = ['files-base-path'=>'','limit'=>0,'update-existing'=>FALSE,'domains'=>'','skip-domain-source'=>FALSE]) {

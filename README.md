@@ -57,7 +57,7 @@ vendor/bin/drush d7-migrate:articles \
 | `--files-base-path` | Base path to D7 public files (local path or HTTP URL) | - | Yes |
 | `--limit` | Number of nodes to process (0 = all) | `0` | No |
 | `--update-existing` | Update existing nodes instead of skipping | `FALSE` | No |
-| `--domains` | Comma-separated list of domain IDs for Domain module (e.g., `new.polissya.today,polissya.today`) | - | No |
+| `--domains` | Comma-separated list of domain machine names for Domain module (e.g., `new_polissya_today,polissya_today`) | - | No |
 | `--skip-domain-source` | Skip setting field_domain_source (canonical domain) even if the field exists | `FALSE` | No |
 
 ### Examples
@@ -92,14 +92,14 @@ vendor/bin/drush d7-migrate:articles \
 ```bash
 vendor/bin/drush d7-migrate:articles \
   --files-base-path="/www/wwwroot/polissya.today/sites/default/files" \
-  --domains="new.polissya.today,polissya.today"
+  --domains="new_polissya_today,polissya_today"
 ```
 
 **Assign domains but skip setting canonical domain (field_domain_source):**
 ```bash
 vendor/bin/drush d7-migrate:articles \
   --files-base-path="/www/wwwroot/polissya.today/sites/default/files" \
-  --domains="new.polissya.today,polissya.today" \
+  --domains="new_polissya_today,polissya_today" \
   --skip-domain-source
 ```
 
@@ -109,7 +109,7 @@ vendor/bin/drush d7-migrate:articles \
   --files-base-path="/www/wwwroot/polissya.today/sites/default/files" \
   --limit=100 \
   --update-existing \
-  --domains="new.polissya.today,polissya.today"
+  --domains="new_polissya_today,polissya_today"
 ```
 
 ### Clear Migrated Content
@@ -187,15 +187,16 @@ The module excludes specific tags during migration:
 ### Domain Module Integration
 Use `--domains` option to assign articles to multiple domains:
 - Requires the Domain module to be installed and configured
+- Domain IDs must be **machine names** (use underscores, not dots: `new_polissya_today` not `new.polissya.today`)
 - Articles will be assigned to the `field_domain_access` field (all domains) - **required**
 - The first domain in the list is set as `field_domain_source` (canonical/primary domain) - **optional**
 - If `field_domain_source` doesn't exist, it will be skipped automatically
 - Use `--skip-domain-source` to prevent setting `field_domain_source` even if the field exists
 - Supports multiple domains (comma-separated list)
 - Works with both new migrations and `--update-existing`
-- Example: `--domains="new.polissya.today,polissya.today"`
+- Example: `--domains="new_polissya_today,polissya_today"`
   - `field_domain_access`: both domains (required)
-  - `field_domain_source`: new.polissya.today (optional - first domain)
+  - `field_domain_source`: new_polissya_today (optional - first domain)
 - Example with `--skip-domain-source`:
   - `field_domain_access`: both domains
   - `field_domain_source`: not set (skipped)
