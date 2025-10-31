@@ -16,13 +16,15 @@ final class MigrateArticlesCommands extends DrushCommands {
    * @option files-base-path Base path to D7 public files (e.g. /www/wwwroot/polissya.today/sites/default/files or https://oldsite/sites/default/files)
    * @option limit Number of nodes to process (0 = all)
    * @option update-existing Update existing nodes instead of skipping them
+   * @option domains Comma-separated list of domain IDs to assign articles to (e.g. new.polissya.today,polissya.today)
    */
-  public function migrate(array $options = ['files-base-path'=>'','limit'=>0,'update-existing'=>FALSE]) {
+  public function migrate(array $options = ['files-base-path'=>'','limit'=>0,'update-existing'=>FALSE,'domains'=>'']) {
     $migrator = \Drupal::service('d7_article_migrate.migrator');
 
     $files_base = $options['files-base-path'] ?? '';
     $limit = (int) ($options['limit'] ?? 0);
     $update_existing = (bool) ($options['update-existing'] ?? FALSE);
+    $domains = $options['domains'] ?? '';
 
     if (empty($files_base)) {
       $this->io()->error('You must provide --files-base-path');
@@ -32,6 +34,14 @@ final class MigrateArticlesCommands extends DrushCommands {
     // Use DB connection key 'migrate' from settings.php
     $migrator->setFilesBasePath(rtrim($files_base, '/'));
     $migrator->setUpdateExisting($update_existing);
+
+    // Set domains if provided
+    if (!empty($domains)) {
+      $domain_ids = array_map('trim', explode(',', $domains));
+      $migrator->setDomainIds($domain_ids);
+      $this->io()->note('Articles will be assigned to domains: ' . implode(', ', $domain_ids));
+    }
+
     $migrator->setSourceConnectionKey('migrate');
 
     $migrator->migrateArticles($limit);

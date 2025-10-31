@@ -28,6 +28,7 @@ class D7Migrator {
   protected bool $updateExisting = FALSE;
   protected ?Connection $sourceDb = NULL;
   protected array $validUserIds = [];
+  protected array $domainIds = [];
 
   public function __construct(
       EntityTypeManagerInterface $etm,
@@ -53,6 +54,10 @@ class D7Migrator {
 
   public function setUpdateExisting(bool $update) {
     $this->updateExisting = $update;
+  }
+
+  public function setDomainIds(array $domainIds) {
+    $this->domainIds = $domainIds;
   }
 
   public function setSourceConnectionKey(string $key) {
@@ -180,13 +185,20 @@ class D7Migrator {
           $node->set('changed', $row->changed);
           if ($term_ids) $node->set('field_tags', array_map(fn($tid)=>['target_id'=>$tid],$term_ids));
           if ($image_fids) $node->set('field_image', array_map(fn($fid)=>['target_id'=>$fid],$image_fids));
+
+          // Assign to domains if specified
+          if (!empty($this->domainIds) && $node->hasField('field_domain_access')) {
+            $node->set('field_domain_access', $this->domainIds);
+          }
+
           $node->save();
           $new_nid = $node->id();
 
           // Update alias for existing node
           $this->migrateAliasFor('node',$nid,$new_nid);
 
-          $this->logger->info("Updated D7 nid {$nid} -> D11 nid {$new_nid} (author: uid {$author_uid})");
+          $domain_info = !empty($this->domainIds) ? ' (domains: ' . implode(', ', $this->domainIds) . ')' : '';
+          $this->logger->info("Updated D7 nid {$nid} -> D11 nid {$new_nid} (author: uid {$author_uid}){$domain_info}");
         } else {
           $this->logger->warning("Could not load node {$already} for update");
           continue;
@@ -204,6 +216,12 @@ class D7Migrator {
         ]);
         if ($term_ids) $node->set('field_tags', array_map(fn($tid)=>['target_id'=>$tid],$term_ids));
         if ($image_fids) $node->set('field_image', array_map(fn($fid)=>['target_id'=>$fid],$image_fids));
+
+        // Assign to domains if specified
+        if (!empty($this->domainIds) && $node->hasField('field_domain_access')) {
+          $node->set('field_domain_access', $this->domainIds);
+        }
+
         $node->save();
         $new_nid = $node->id();
 
@@ -211,7 +229,8 @@ class D7Migrator {
 
         $this->database->insert('d7_article_migrate_map')->fields(['type'=>'node','source_id'=>(string)$nid,'dest_id'=>(string)$new_nid])->execute();
 
-        $this->logger->info("Migrated D7 nid {$nid} -> D11 nid {$new_nid} (author: uid {$author_uid})");
+        $domain_info = !empty($this->domainIds) ? ' (domains: ' . implode(', ', $this->domainIds) . ')' : '';
+        $this->logger->info("Migrated D7 nid {$nid} -> D11 nid {$new_nid} (author: uid {$author_uid}){$domain_info}");
       }
     }
   }
@@ -383,6 +402,9 @@ class D7Migrator {
       foreach ($bodyNode->childNodes as $child) {
         $inner .= $dom->saveHTML($child);
       }
+
+      // Convert all non-breaking spaces (U+00A0) to regular spaces
+      $inner = str_replace("\xc2\xa0", ' ', $inner);
 
       if ($cleaned_count > 0 || $removed_count > 0) {
         $this->logger->info("Cleaned {$cleaned_count} attributes and removed {$removed_count} empty elements from body HTML");
