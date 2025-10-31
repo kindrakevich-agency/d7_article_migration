@@ -362,8 +362,10 @@ class D7Migrator {
 
     libxml_use_internal_errors(true);
     $dom = new \DOMDocument();
-    // Use XML encoding declaration instead of deprecated mb_convert_encoding
-    $dom->loadHTML('<?xml encoding="UTF-8">' . $body, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    $dom->encoding = 'UTF-8';
+
+    // Load HTML with proper UTF-8 encoding
+    $dom->loadHTML('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' . $body . '</body></html>');
 
     $xpath = new \DOMXPath($dom);
     $cleaned_count = 0;
@@ -399,6 +401,7 @@ class D7Migrator {
 
       // Get text content and check if it has actual content
       $text_content = $div->textContent;
+      // Replace non-breaking spaces with regular spaces for checking
       $text_content = str_replace("\xc2\xa0", ' ', $text_content);
       $normalized = trim($text_content);
 
@@ -494,7 +497,10 @@ class D7Migrator {
         $inner .= $dom->saveHTML($child);
       }
 
-      // Convert all non-breaking spaces (U+00A0) to regular spaces
+      // Convert HTML entities &nbsp; to regular spaces
+      $inner = str_replace('&nbsp;', ' ', $inner);
+
+      // Convert UTF-8 non-breaking spaces (U+00A0) to regular spaces
       $nbsp_count = substr_count($inner, "\xc2\xa0");
       if ($nbsp_count > 0) {
         $inner = str_replace("\xc2\xa0", ' ', $inner);
