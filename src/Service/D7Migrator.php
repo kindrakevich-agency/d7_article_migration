@@ -384,7 +384,19 @@ class D7Migrator {
     // Convert non-empty div elements to p tags
     $divs = $xpath->query('//div');
     $converted_count = 0;
+
+    // Convert NodeList to array to avoid issues when modifying DOM during iteration
+    $div_array = [];
     foreach ($divs as $div) {
+      $div_array[] = $div;
+    }
+
+    foreach ($div_array as $div) {
+      // Skip if div was already removed/modified
+      if (!$div->parentNode) {
+        continue;
+      }
+
       // Get text content and check if it has actual content
       $text_content = $div->textContent;
       $text_content = str_replace("\xc2\xa0", ' ', $text_content);
@@ -405,6 +417,13 @@ class D7Migrator {
         // Create a new p element
         $p = $dom->createElement('p');
 
+        // Copy attributes from div to p (like align)
+        if ($div->hasAttributes()) {
+          foreach ($div->attributes as $attr) {
+            $p->setAttribute($attr->name, $attr->value);
+          }
+        }
+
         // Move all child nodes from div to p
         while ($div->firstChild) {
           $p->appendChild($div->firstChild);
@@ -424,7 +443,19 @@ class D7Migrator {
     // But preserve elements that contain child elements like images, links, etc.
     $empty_elements = $xpath->query('//p | //div | //span');
     $removed_count = 0;
+
+    // Convert NodeList to array to avoid issues when modifying DOM during iteration
+    $elements_array = [];
     foreach ($empty_elements as $element) {
+      $elements_array[] = $element;
+    }
+
+    foreach ($elements_array as $element) {
+      // Skip if element was already removed
+      if (!$element->parentNode) {
+        continue;
+      }
+
       // Skip if element has child elements (img, a, strong, em, etc.)
       if ($element->hasChildNodes()) {
         $has_element_children = false;
