@@ -521,8 +521,11 @@ class D7Migrator {
     if (!$body) return $body;
     libxml_use_internal_errors(true);
     $dom = new \DOMDocument();
-    // Use XML encoding declaration instead of deprecated mb_convert_encoding
-    $dom->loadHTML('<?xml encoding="UTF-8">' . $body, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    $dom->encoding = 'UTF-8';
+
+    // Load HTML with proper UTF-8 encoding (same as cleanBodyHtml)
+    $dom->loadHTML('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' . $body . '</body></html>');
+
     $imgs = $dom->getElementsByTagName('img');
     $changed = FALSE;
     $toRemove = [];
@@ -575,7 +578,10 @@ class D7Migrator {
         // Save to Drupal 11
         $basename = basename(parse_url($fullPath, PHP_URL_PATH));
         $destination = "public://body_images/{$nid}/{$basename}";
-        $this->fileSystem->prepareDirectory(dirname($destination), FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
+
+        // Fix: Store dirname in variable first to avoid "pass by reference" warning
+        $destination_dir = dirname($destination);
+        $this->fileSystem->prepareDirectory($destination_dir, FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
         $file = $this->fileRepository->writeData($data, $destination, FileSystemInterface::EXISTS_RENAME);
 
         if ($file) {
@@ -599,14 +605,20 @@ class D7Migrator {
 
     // Remove failed images from DOM
     foreach ($toRemove as $img) {
-      $img->parentNode->removeChild($img);
+      if ($img->parentNode) {
+        $img->parentNode->removeChild($img);
+      }
     }
 
     if ($changed) {
       $bodyNode = $dom->getElementsByTagName('body')->item(0);
-      $inner = '';
-      foreach ($bodyNode->childNodes as $child) $inner .= $dom->saveHTML($child);
-      return $inner;
+      if ($bodyNode) {
+        $inner = '';
+        foreach ($bodyNode->childNodes as $child) {
+          $inner .= $dom->saveHTML($child);
+        }
+        return $inner;
+      }
     }
     return $body;
   }
