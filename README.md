@@ -58,6 +58,7 @@ vendor/bin/drush d7-migrate:articles \
 | `--limit` | Number of nodes to process (0 = all) | `0` | No |
 | `--update-existing` | Update existing nodes instead of skipping | `FALSE` | No |
 | `--domains` | Comma-separated list of domain IDs for Domain module (e.g., `new.polissya.today,polissya.today`) | - | No |
+| `--skip-domain-source` | Skip setting field_domain_source (canonical domain) even if the field exists | `FALSE` | No |
 
 ### Examples
 
@@ -92,6 +93,14 @@ vendor/bin/drush d7-migrate:articles \
 vendor/bin/drush d7-migrate:articles \
   --files-base-path="/www/wwwroot/polissya.today/sites/default/files" \
   --domains="new.polissya.today,polissya.today"
+```
+
+**Assign domains but skip setting canonical domain (field_domain_source):**
+```bash
+vendor/bin/drush d7-migrate:articles \
+  --files-base-path="/www/wwwroot/polissya.today/sites/default/files" \
+  --domains="new.polissya.today,polissya.today" \
+  --skip-domain-source
 ```
 
 **Full example with all options:**
@@ -181,11 +190,15 @@ Use `--domains` option to assign articles to multiple domains:
 - Articles will be assigned to the `field_domain_access` field (all domains) - **required**
 - The first domain in the list is set as `field_domain_source` (canonical/primary domain) - **optional**
 - If `field_domain_source` doesn't exist, it will be skipped automatically
+- Use `--skip-domain-source` to prevent setting `field_domain_source` even if the field exists
 - Supports multiple domains (comma-separated list)
 - Works with both new migrations and `--update-existing`
 - Example: `--domains="new.polissya.today,polissya.today"`
   - `field_domain_access`: both domains (required)
   - `field_domain_source`: new.polissya.today (optional - first domain)
+- Example with `--skip-domain-source`:
+  - `field_domain_access`: both domains
+  - `field_domain_source`: not set (skipped)
 
 ## Notes
 - Ensure site has `article` content type with fields `field_tags` (vocab `tags`) and `field_image`.

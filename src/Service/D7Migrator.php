@@ -29,6 +29,7 @@ class D7Migrator {
   protected ?Connection $sourceDb = NULL;
   protected array $validUserIds = [];
   protected array $domainIds = [];
+  protected bool $skipDomainSource = FALSE;
 
   public function __construct(
       EntityTypeManagerInterface $etm,
@@ -58,6 +59,10 @@ class D7Migrator {
 
   public function setDomainIds(array $domainIds) {
     $this->domainIds = $domainIds;
+  }
+
+  public function setSkipDomainSource(bool $skip) {
+    $this->skipDomainSource = $skip;
   }
 
   public function setSourceConnectionKey(string $key) {
@@ -194,8 +199,8 @@ class D7Migrator {
               $node->set('field_domain_access', $this->domainIds);
               $this->logger->info("Assigned domains to node {$already}: " . implode(', ', $this->domainIds));
 
-              // Set the first domain as the source domain (canonical domain)
-              if ($node->hasField('field_domain_source')) {
+              // Set the first domain as the source domain (canonical domain) unless skipped
+              if (!$this->skipDomainSource && $node->hasField('field_domain_source')) {
                 $node->set('field_domain_source', $this->domainIds[0]);
                 $this->logger->info("Set source domain for node {$already}: " . $this->domainIds[0]);
               }
@@ -236,8 +241,8 @@ class D7Migrator {
             $node->set('field_domain_access', $this->domainIds);
             $this->logger->info("Assigned domains to new node for D7 nid {$nid}: " . implode(', ', $this->domainIds));
 
-            // Set the first domain as the source domain (canonical domain)
-            if ($node->hasField('field_domain_source')) {
+            // Set the first domain as the source domain (canonical domain) unless skipped
+            if (!$this->skipDomainSource && $node->hasField('field_domain_source')) {
               $node->set('field_domain_source', $this->domainIds[0]);
               $this->logger->info("Set source domain for new node D7 nid {$nid}: " . $this->domainIds[0]);
             }

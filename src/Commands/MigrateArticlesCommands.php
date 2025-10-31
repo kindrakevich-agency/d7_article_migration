@@ -17,14 +17,16 @@ final class MigrateArticlesCommands extends DrushCommands {
    * @option limit Number of nodes to process (0 = all)
    * @option update-existing Update existing nodes instead of skipping them
    * @option domains Comma-separated list of domain IDs to assign articles to (e.g. new.polissya.today,polissya.today)
+   * @option skip-domain-source Skip setting field_domain_source (canonical domain)
    */
-  public function migrate(array $options = ['files-base-path'=>'','limit'=>0,'update-existing'=>FALSE,'domains'=>'']) {
+  public function migrate(array $options = ['files-base-path'=>'','limit'=>0,'update-existing'=>FALSE,'domains'=>'','skip-domain-source'=>FALSE]) {
     $migrator = \Drupal::service('d7_article_migrate.migrator');
 
     $files_base = $options['files-base-path'] ?? '';
     $limit = (int) ($options['limit'] ?? 0);
     $update_existing = (bool) ($options['update-existing'] ?? FALSE);
     $domains = $options['domains'] ?? '';
+    $skip_domain_source = (bool) ($options['skip-domain-source'] ?? FALSE);
 
     if (empty($files_base)) {
       $this->io()->error('You must provide --files-base-path');
@@ -34,12 +36,17 @@ final class MigrateArticlesCommands extends DrushCommands {
     // Use DB connection key 'migrate' from settings.php
     $migrator->setFilesBasePath(rtrim($files_base, '/'));
     $migrator->setUpdateExisting($update_existing);
+    $migrator->setSkipDomainSource($skip_domain_source);
 
     // Set domains if provided
     if (!empty($domains)) {
       $domain_ids = array_map('trim', explode(',', $domains));
       $migrator->setDomainIds($domain_ids);
       $this->io()->note('Articles will be assigned to domains: ' . implode(', ', $domain_ids));
+
+      if ($skip_domain_source) {
+        $this->io()->note('field_domain_source will NOT be set (--skip-domain-source enabled)');
+      }
     }
 
     $migrator->setSourceConnectionKey('migrate');
