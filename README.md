@@ -1,7 +1,11 @@
 # D7 Article Migrate (Drupal 11)
 
 ## What it does
-This module provides a Drush command to migrate published 'article' nodes from a Drupal 7 database connection defined in `settings.php` under the `'migrate'` key.
+This module provides Drush commands to migrate published 'article' nodes:
+- **d7-migrate:articles** - Migrate from Drupal 7 to Drupal 11
+- **d11-migrate:articles** - Migrate from Drupal 11 to Drupal 11
+
+Database connections are defined in `settings.php`.
 
 It migrates:
 - title
@@ -43,14 +47,16 @@ vendor/bin/drush cr
 
 ## Usage
 
-### Basic Migration
+## Drupal 7 to Drupal 11 Migration
+
+### Basic Migration (D7 to D11)
 Run migration (files-base-path required):
 ```bash
 vendor/bin/drush d7-migrate:articles \
   --files-base-path="/www/wwwroot/polissya.today/sites/default/files"
 ```
 
-### Available Options
+### Available Options (D7 Migration)
 
 | Option | Description | Default | Required |
 |--------|-------------|---------|----------|
@@ -130,6 +136,104 @@ This command will:
 - Clear the migration map table
 
 The command requires confirmation before proceeding.
+
+---
+
+## Drupal 11 to Drupal 11 Migration
+
+### Setup for D11 to D11 Migration
+
+Add source D11 database connection to `settings.php`:
+```php
+$databases['d11_source']['default'] = [
+  'driver' => 'mysql',
+  'database' => 'source_drupal11_db',
+  'username' => 'dbuser',
+  'password' => 'dbpass',
+  'host' => '127.0.0.1',
+  'port' => '3306',
+  'prefix' => '',
+];
+```
+
+### Basic Migration (D11 to D11)
+```bash
+vendor/bin/drush d11-migrate:articles \
+  --files-base-path="/www/wwwroot/source-site/sites/default/files"
+```
+
+### Available Options (D11 Migration)
+
+| Option | Description | Default | Required |
+|--------|-------------|---------|----------|
+| `--source-db` | Database connection key from settings.php | `d11_source` | No |
+| `--files-base-path` | Base path to source D11 public files (local path or HTTP URL) | - | Yes |
+| `--limit` | Number of nodes to process (0 = all) | `0` | No |
+| `--update-existing` | Update existing nodes instead of skipping | `FALSE` | No |
+| `--domains` | Comma-separated list of domain machine names (e.g., `new_polissya_today,polissya_today`) | - | No |
+| `--skip-domain-source` | Skip setting field_domain_source (canonical domain) | `FALSE` | No |
+
+### Examples (D11 Migration)
+
+**Migrate from another D11 site with default database key:**
+```bash
+vendor/bin/drush d11-migrate:articles \
+  --files-base-path="/www/wwwroot/source-site/sites/default/files"
+```
+
+**Migrate with custom database connection key:**
+```bash
+vendor/bin/drush d11-migrate:articles \
+  --source-db="old_d11_site" \
+  --files-base-path="https://old-site.example.com/sites/default/files"
+```
+
+**Migrate with domains and limit:**
+```bash
+vendor/bin/drush d11-migrate:articles \
+  --source-db="d11_source" \
+  --files-base-path="/www/wwwroot/source-site/sites/default/files" \
+  --domains="new_polissya_today,polissya_today" \
+  --limit=100
+```
+
+**Full example with all options:**
+```bash
+vendor/bin/drush d11-migrate:articles \
+  --source-db="d11_source" \
+  --files-base-path="/www/wwwroot/source-site/sites/default/files" \
+  --limit=100 \
+  --update-existing \
+  --domains="new_polissya_today,polissya_today"
+```
+
+### What Gets Migrated (D11 to D11)
+
+From source Drupal 11 site:
+- **Nodes**: Article content type
+- **Fields**:
+  - `title`
+  - `body` (with text format preserved)
+  - `field_image` (multiple images)
+  - `field_tags` (taxonomy terms from tags vocabulary)
+  - `field_video` (Video Embed field - converted to iframe in body)
+- **Metadata**: `created`, `changed`, `uid` (user ID preserved)
+- **Taxonomy**: Terms from the tags vocabulary
+- **Path aliases**: URL aliases for nodes and taxonomy terms
+- **Domains**: Optional assignment to domain(s) via field_domain_access
+
+### Video Embed Field Conversion
+
+If the source article has a `field_video` (Video Embed field), it will be converted to an iframe and appended to the article body. Supported video platforms:
+- **YouTube**: Converts to YouTube embed iframe
+- **Vimeo**: Converts to Vimeo player iframe
+
+Example: A YouTube URL like `https://www.youtube.com/watch?v=VIDEO_ID` becomes:
+```html
+<p><iframe width="560" height="315" src="https://www.youtube.com/embed/VIDEO_ID" ...></iframe></p>
+```
+
+---
 
 ## Features
 

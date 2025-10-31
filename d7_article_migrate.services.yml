@@ -10,3 +10,15 @@ services:
       - '@logger.channel.default'
       - '@database'
     public: true
+
+  d7_article_migrate.d11_migrator:
+    class: Drupal\d7_article_migrate\Service\D11Migrator
+    arguments:
+      - '@entity_type.manager'
+      - '@file_system'
+      - '@file.repository'
+      - '@file_url_generator'
+      - '@http_client'
+      - '@logger.channel.default'
+      - '@database'
+    public: true

@@ -78,4 +78,55 @@ final class MigrateArticlesCommands extends DrushCommands {
     $this->io()->success('All migrated content has been cleared.');
     return 0;
   }
+
+  /**
+   * Migrate articles from another Drupal 11 site.
+   *
+   * @command d11-migrate:articles
+   * @option source-db Database connection key from settings.php (default: d11_source)
+   * @option files-base-path Base path to source D11 public files (e.g. /www/wwwroot/oldsite/sites/default/files or https://oldsite/sites/default/files)
+   * @option limit Number of nodes to process (0 = all)
+   * @option update-existing Update existing nodes instead of skipping them
+   * @option domains Comma-separated list of domain machine names to assign articles to (e.g. new_polissya_today,polissya_today)
+   * @option skip-domain-source Skip setting field_domain_source (canonical domain)
+   */
+  public function migrateFromD11(array $options = ['source-db'=>'d11_source','files-base-path'=>'','limit'=>0,'update-existing'=>FALSE,'domains'=>'','skip-domain-source'=>FALSE]) {
+    $migrator = \Drupal::service('d7_article_migrate.d11_migrator');
+
+    $source_db = $options['source-db'] ?? 'd11_source';
+    $files_base = $options['files-base-path'] ?? '';
+    $limit = (int) ($options['limit'] ?? 0);
+    $update_existing = (bool) ($options['update-existing'] ?? FALSE);
+    $domains = $options['domains'] ?? '';
+    $skip_domain_source = (bool) ($options['skip-domain-source'] ?? FALSE);
+
+    if (empty($files_base)) {
+      $this->io()->error('You must provide --files-base-path');
+      return 1;
+    }
+
+    // Set source database connection
+    $migrator->setSourceConnectionKey($source_db);
+    $this->io()->note("Using source database connection: {$source_db}");
+
+    $migrator->setFilesBasePath(rtrim($files_base, '/'));
+    $migrator->setUpdateExisting($update_existing);
+    $migrator->setSkipDomainSource($skip_domain_source);
+
+    // Set domains if provided
+    if (!empty($domains)) {
+      $domain_ids = array_map('trim', explode(',', $domains));
+      $migrator->setDomainIds($domain_ids);
+      $this->io()->note('Articles will be assigned to domains: ' . implode(', ', $domain_ids));
+
+      if ($skip_domain_source) {
+        $this->io()->note('field_domain_source will NOT be set (--skip-domain-source enabled)');
+      }
+    }
+
+    $migrator->migrateArticles($limit);
+
+    $this->io()->success('D11 Article migration finished.');
+    return 0;
+  }
 }
