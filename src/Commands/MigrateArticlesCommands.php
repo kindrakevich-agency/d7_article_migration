@@ -89,8 +89,9 @@ final class MigrateArticlesCommands extends DrushCommands {
    * @option update-existing Update existing nodes instead of skipping them
    * @option domains Comma-separated list of domain machine names to assign articles to (e.g. new_polissya_today,polissya_today)
    * @option skip-domain-source Skip setting field_domain_source (canonical domain)
+   * @option migrate-all-terms Migrate all taxonomy terms from source DB before migrating articles
    */
-  public function migrateFromD11(array $options = ['source-db'=>'d11_source','files-base-path'=>'','limit'=>0,'update-existing'=>FALSE,'domains'=>'','skip-domain-source'=>FALSE]) {
+  public function migrateFromD11(array $options = ['source-db'=>'d11_source','files-base-path'=>'','limit'=>0,'update-existing'=>FALSE,'domains'=>'','skip-domain-source'=>FALSE,'migrate-all-terms'=>FALSE]) {
     $migrator = \Drupal::service('d7_article_migrate.d11_migrator');
 
     $source_db = $options['source-db'] ?? 'd11_source';
@@ -99,6 +100,7 @@ final class MigrateArticlesCommands extends DrushCommands {
     $update_existing = (bool) ($options['update-existing'] ?? FALSE);
     $domains = $options['domains'] ?? '';
     $skip_domain_source = (bool) ($options['skip-domain-source'] ?? FALSE);
+    $migrate_all_terms = (bool) ($options['migrate-all-terms'] ?? FALSE);
 
     if (empty($files_base)) {
       $this->io()->error('You must provide --files-base-path');
@@ -122,6 +124,13 @@ final class MigrateArticlesCommands extends DrushCommands {
       if ($skip_domain_source) {
         $this->io()->note('field_domain_source will NOT be set (--skip-domain-source enabled)');
       }
+    }
+
+    // Migrate all terms first if option is enabled
+    if ($migrate_all_terms) {
+      $this->io()->note('Migrating all taxonomy terms from source D11...');
+      $migrator->migrateAllTerms();
+      $this->io()->success('All taxonomy terms have been migrated.');
     }
 
     $migrator->migrateArticles($limit);

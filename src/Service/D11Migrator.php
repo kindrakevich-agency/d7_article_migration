@@ -133,6 +133,52 @@ class D11Migrator {
     }
   }
 
+  public function migrateAllTerms() {
+    $source = $this->getSourceDb();
+
+    // Ensure migration map table exists
+    $this->ensureMigrationMapTableExists();
+
+    // Get all taxonomy terms from source D11
+    $query = $source->select('taxonomy_term_field_data', 't')
+      ->fields('t', ['tid', 'vid', 'name'])
+      ->orderBy('t.tid', 'ASC');
+
+    $terms = $query->execute()->fetchAll();
+    $count = count($terms);
+    $this->logger->info("Found {$count} taxonomy terms in source D11 site");
+
+    $migrated = 0;
+    $skipped = 0;
+
+    foreach ($terms as $term_row) {
+      $tid = $term_row->tid;
+
+      // Check if already migrated
+      $map_table = $this->getMigrationMapTable();
+      $already = $this->database->select($map_table, 'm')
+        ->fields('m', ['dest_id'])
+        ->condition('type', 'term')
+        ->condition('source_id', (string)$tid)
+        ->execute()
+        ->fetchField();
+
+      if ($already) {
+        $skipped++;
+        $this->logger->notice("Term '{$term_row->name}' (tid {$tid}) already migrated to {$already}, skipping");
+        continue;
+      }
+
+      // Migrate the term
+      $new_tid = $this->migrateTerm($tid);
+      if ($new_tid) {
+        $migrated++;
+      }
+    }
+
+    $this->logger->info("Taxonomy term migration complete: {$migrated} migrated, {$skipped} skipped (already exist)");
+  }
+
   public function migrateArticles(int $limit = 0) {
     $source = $this->getSourceDb();
 

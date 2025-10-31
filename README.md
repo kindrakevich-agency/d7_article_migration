@@ -180,6 +180,7 @@ vendor/bin/drush d11-migrate:articles \
 | `--update-existing` | Update existing nodes instead of skipping | `FALSE` | No |
 | `--domains` | Comma-separated list of domain machine names (e.g., `new_polissya_today,polissya_today`) | - | No |
 | `--skip-domain-source` | Skip setting field_domain_source (canonical domain) | `FALSE` | No |
+| `--migrate-all-terms` | Migrate all taxonomy terms from source DB before migrating articles | `FALSE` | No |
 
 ### Examples (D11 Migration)
 
@@ -205,6 +206,14 @@ vendor/bin/drush d11-migrate:articles \
   --limit=100
 ```
 
+**Migrate all taxonomy terms before migrating articles:**
+```bash
+vendor/bin/drush d11-migrate:articles \
+  --source-db="d11_source" \
+  --files-base-path="/www/wwwroot/source-site/sites/default/files" \
+  --migrate-all-terms
+```
+
 **Full example with all options:**
 ```bash
 vendor/bin/drush d11-migrate:articles \
@@ -212,7 +221,8 @@ vendor/bin/drush d11-migrate:articles \
   --files-base-path="/www/wwwroot/source-site/sites/default/files" \
   --limit=100 \
   --update-existing \
-  --domains="new_polissya_today,polissya_today"
+  --domains="new_polissya_today,polissya_today" \
+  --migrate-all-terms
 ```
 
 ### What Gets Migrated (D11 to D11)
@@ -265,6 +275,29 @@ Unlike D7 migration which uses a single `d7_article_migrate_map` table, D11 to D
 - Each table stores mappings: `type` (node/term/file), `source_id`, `dest_id`
 
 This allows you to migrate articles from multiple D11 sources (e.g., multiple old sites) into one new D11 site without ID conflicts.
+
+### Migrate All Terms Option
+
+The `--migrate-all-terms` option allows you to migrate all taxonomy terms from the source D11 database before migrating articles:
+
+**How it works:**
+- Queries all terms from `taxonomy_term_field_data` table in source D11
+- Migrates each term to the destination D11 site
+- Skips terms that have already been migrated (checks migration map)
+- Preserves term properties: name, description, weight, langcode, vocabulary
+- Creates path aliases for terms
+- Logs progress with counts of migrated and skipped terms
+
+**When to use:**
+- When you want to migrate all taxonomy terms regardless of whether they're used in articles
+- When you need complete taxonomy structure from source site
+- When migrating terms used in other content types besides articles
+
+**Behavior:**
+- Terms are migrated BEFORE articles are processed
+- If a term with the same name already exists in destination, it will be reused
+- Already-migrated terms (found in migration map) are skipped
+- Only terms referenced by articles are migrated if this option is NOT used
 
 ### Clear D11 Migrated Content
 
