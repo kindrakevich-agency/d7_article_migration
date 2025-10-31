@@ -233,6 +233,12 @@ class D7Migrator {
       return NULL;
     }
 
+    // Skip "Новини" tag
+    if ($tr->name === 'Новини') {
+      $this->logger->notice("Skipping term {$tid} — excluded tag 'Новини'");
+      return NULL;
+    }
+
     // Destination vocabulary is 'tags'
     $vocab = 'tags';
     $terms = \Drupal::entityTypeManager()->getStorage('taxonomy_term')->loadByProperties(['name'=>$tr->name,'vid'=>$vocab]);
