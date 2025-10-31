@@ -7,15 +7,22 @@ This module provides Drush commands to migrate published 'article' nodes:
 
 Database connections are defined in `settings.php`.
 
-It migrates:
-- title
-- body (imports inline <img> images with relative URLs, cleans HTML)
-- field_image (multiple)
-- field_tags (D7 vocabulary `vid = 3` -> destination vocabulary `tags`, excludes "Новини")
+### D7 to D11 Migration Features:
+- title, body (imports inline <img> images with relative URLs, cleans HTML)
+- field_image (multiple), field_tags (D7 vocabulary `vid = 3` -> `tags`, excludes "Новини")
 - creation and modification dates (created, changed)
 - assigns random authors to migrated articles
 - preserves path aliases for nodes and taxonomy terms
 - stores mapping in `d7_article_migrate_map` to avoid duplicate imports
+- supports updating existing migrated nodes with `--update-existing` option
+- supports assigning articles to multiple domains with `--domains` option
+
+### D11 to D11 Migration Features:
+- title, body (imports inline <img> images with relative URLs)
+- field_image (multiple), field_tags, field_video (converts to iframe in body)
+- creation and modification dates (created, changed), uid (preserves user ID)
+- preserves path aliases for nodes and taxonomy terms
+- stores mapping in source-specific tables (`d11_migrate_map_{source_db_key}`) to support multiple D11 sources
 - supports updating existing migrated nodes with `--update-existing` option
 - supports assigning articles to multiple domains with `--domains` option
 
@@ -213,7 +220,7 @@ From source Drupal 11 site:
 - **Nodes**: Article content type
 - **Fields**:
   - `title`
-  - `body` (with text format preserved)
+  - `body` (with text format preserved, inline images migrated)
   - `field_image` (multiple images)
   - `field_tags` (taxonomy terms from tags vocabulary)
   - `field_video` (Video Embed field - converted to iframe in body)
@@ -221,6 +228,18 @@ From source Drupal 11 site:
 - **Taxonomy**: Terms from the tags vocabulary
 - **Path aliases**: URL aliases for nodes and taxonomy terms
 - **Domains**: Optional assignment to domain(s) via field_domain_access
+- **Body Images**: All inline `<img>` tags in body HTML are migrated to `public://body_images/{nid}/`
+
+### Body Image Migration (D11 to D11)
+
+The module automatically migrates inline images found in article body HTML:
+- Finds all `<img>` tags in the body field
+- Downloads/copies images from source D11 site (supports both local paths and HTTP URLs)
+- Saves to destination at `public://body_images/{nid}/{filename}`
+- Updates `src` attributes to new relative URLs
+- Handles both absolute URLs (e.g., `http://example.com/image.jpg`) and relative paths (e.g., `/sites/default/files/inline/image.jpg`)
+- Failed images are automatically removed from body content with warnings logged
+- Uses proper UTF-8 encoding to preserve special characters
 
 ### Video Embed Field Conversion
 
@@ -232,6 +251,39 @@ Example: A YouTube URL like `https://www.youtube.com/watch?v=VIDEO_ID` becomes:
 ```html
 <p><iframe width="560" height="315" src="https://www.youtube.com/embed/VIDEO_ID" ...></iframe></p>
 ```
+
+### Migration Map Tables (D11 to D11)
+
+Unlike D7 migration which uses a single `d7_article_migrate_map` table, D11 to D11 migrations use **source-specific migration map tables**:
+- Table name format: `d11_migrate_map_{source_db_key}`
+- Example: `--source-db=d11_source` creates table `d11_migrate_map_d11_source`
+- Example: `--source-db=old_site` creates table `d11_migrate_map_old_site`
+- **Why**: Prevents NID conflicts when migrating from multiple D11 sources
+- Tables are automatically created on first migration from each source
+- Each table stores mappings: `type` (node/term/file), `source_id`, `dest_id`
+
+This allows you to migrate articles from multiple D11 sources (e.g., multiple old sites) into one new D11 site without ID conflicts.
+
+### Clear D11 Migrated Content
+
+**WARNING: This command will delete migrated content from a specific source and cannot be undone!**
+
+Clear all migrated articles from a specific D11 source database:
+```bash
+vendor/bin/drush d11-migrate:clear --source-db="d11_source"
+```
+
+This command will:
+- Delete all migrated article nodes from the specified source
+- Delete all files attached to field_image
+- Delete all body images (public://body_images/{nid}/)
+- Delete all migrated taxonomy terms from the specified source
+- Delete all migrated path aliases
+- Clear the source-specific migration map table (`d11_migrate_map_{source_db_key}`)
+
+The command requires confirmation before proceeding.
+
+**Note**: Only content migrated from the specified `--source-db` will be deleted. Content from other D11 sources remains untouched.
 
 ---
 
