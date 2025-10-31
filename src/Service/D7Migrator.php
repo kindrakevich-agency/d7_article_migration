@@ -177,6 +177,8 @@ class D7Migrator {
         // Update existing node
         $node = Node::load($already);
         if ($node) {
+          $this->logger->info("Updating existing node {$already} for D7 nid {$nid}");
+
           $node->set('title', $row->title);
           $node->set('body', ['value'=>$body,'format'=>'full_html']);
           $node->set('status', 1);
@@ -187,8 +189,13 @@ class D7Migrator {
           if ($image_fids) $node->set('field_image', array_map(fn($fid)=>['target_id'=>$fid],$image_fids));
 
           // Assign to domains if specified
-          if (!empty($this->domainIds) && $node->hasField('field_domain_access')) {
-            $node->set('field_domain_access', $this->domainIds);
+          if (!empty($this->domainIds)) {
+            if ($node->hasField('field_domain_access')) {
+              $node->set('field_domain_access', $this->domainIds);
+              $this->logger->info("Assigned domains to node {$already}: " . implode(', ', $this->domainIds));
+            } else {
+              $this->logger->warning("Node {$already} does not have field_domain_access field. Domain assignment skipped.");
+            }
           }
 
           $node->save();
@@ -218,8 +225,13 @@ class D7Migrator {
         if ($image_fids) $node->set('field_image', array_map(fn($fid)=>['target_id'=>$fid],$image_fids));
 
         // Assign to domains if specified
-        if (!empty($this->domainIds) && $node->hasField('field_domain_access')) {
-          $node->set('field_domain_access', $this->domainIds);
+        if (!empty($this->domainIds)) {
+          if ($node->hasField('field_domain_access')) {
+            $node->set('field_domain_access', $this->domainIds);
+            $this->logger->info("Assigned domains to new node for D7 nid {$nid}: " . implode(', ', $this->domainIds));
+          } else {
+            $this->logger->warning("New node for D7 nid {$nid} does not have field_domain_access field. Domain assignment skipped.");
+          }
         }
 
         $node->save();
@@ -404,7 +416,11 @@ class D7Migrator {
       }
 
       // Convert all non-breaking spaces (U+00A0) to regular spaces
-      $inner = str_replace("\xc2\xa0", ' ', $inner);
+      $nbsp_count = substr_count($inner, "\xc2\xa0");
+      if ($nbsp_count > 0) {
+        $inner = str_replace("\xc2\xa0", ' ', $inner);
+        $this->logger->info("Converted {$nbsp_count} non-breaking spaces to regular spaces in body HTML");
+      }
 
       if ($cleaned_count > 0 || $removed_count > 0) {
         $this->logger->info("Cleaned {$cleaned_count} attributes and removed {$removed_count} empty elements from body HTML");
