@@ -129,4 +129,38 @@ final class MigrateArticlesCommands extends DrushCommands {
     $this->io()->success('D11 Article migration finished.');
     return 0;
   }
+
+  /**
+   * Clear all articles migrated from D11 source.
+   *
+   * @command d11-migrate:clear
+   * @option source-db Database connection key from settings.php (default: d11_source)
+   * @usage d11-migrate:clear
+   *   Delete all migrated content from D11 source (nodes, terms, files, aliases)
+   */
+  public function clearD11(array $options = ['source-db'=>'d11_source']) {
+    $migrator = \Drupal::service('d7_article_migrate.d11_migrator');
+
+    $source_db = $options['source-db'] ?? 'd11_source';
+
+    if (!$this->io()->confirm('Are you sure you want to delete ALL articles migrated from the D11 source database? This cannot be undone!')) {
+      $this->io()->warning('Clear operation cancelled.');
+      return 1;
+    }
+
+    // Set source database connection to verify it exists
+    try {
+      $migrator->setSourceConnectionKey($source_db);
+      $this->io()->note("Clearing content migrated from database: {$source_db}");
+    } catch (\Exception $e) {
+      $this->io()->error("Could not connect to source database '{$source_db}': " . $e->getMessage());
+      return 1;
+    }
+
+    $this->io()->note('Clearing all migrated content from D11 source...');
+    $migrator->clearMigratedContent();
+
+    $this->io()->success('All migrated D11 content has been cleared.');
+    return 0;
+  }
 }

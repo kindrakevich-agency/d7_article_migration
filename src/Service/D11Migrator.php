@@ -27,6 +27,7 @@ class D11Migrator {
   protected string $filesBasePath;
   protected bool $updateExisting = FALSE;
   protected ?Connection $sourceDb = NULL;
+  protected string $sourceDbKey = '';
   protected array $domainIds = [];
   protected bool $skipDomainSource = FALSE;
 
@@ -65,6 +66,7 @@ class D11Migrator {
   }
 
   public function setSourceConnectionKey(string $key) {
+    $this->sourceDbKey = $key;
     $this->sourceDb = Database::getConnection('default', $key);
   }
 
@@ -73,8 +75,41 @@ class D11Migrator {
     return $this->sourceDb;
   }
 
+  protected function getMigrationMapTable(): string {
+    // Create table name based on source database key
+    // Replace special characters with underscores for valid table name
+    $safe_key = preg_replace('/[^a-zA-Z0-9_]/', '_', $this->sourceDbKey);
+    return 'd11_migrate_map_' . $safe_key;
+  }
+
+  protected function ensureMigrationMapTableExists() {
+    $table_name = $this->getMigrationMapTable();
+
+    if (!$this->database->schema()->tableExists($table_name)) {
+      $this->logger->info("Creating migration map table: {$table_name}");
+
+      $this->database->schema()->createTable($table_name, [
+        'fields' => [
+          'type' => ['type' => 'varchar', 'length' => 32, 'not null' => TRUE],
+          'source_id' => ['type' => 'varchar', 'length' => 255, 'not null' => TRUE],
+          'dest_id' => ['type' => 'varchar', 'length' => 255, 'not null' => TRUE],
+        ],
+        'primary key' => ['type', 'source_id'],
+        'indexes' => [
+          'dest_id' => ['dest_id'],
+        ],
+      ]);
+
+      $this->logger->info("Created migration map table: {$table_name}");
+    }
+  }
+
   public function migrateArticles(int $limit = 0) {
     $source = $this->getSourceDb();
+
+    // Ensure migration map table exists
+    $this->ensureMigrationMapTableExists();
+    $map_table = $this->getMigrationMapTable();
 
     // Get published article nodes from source D11
     $query = $source->select('node_field_data', 'n')
@@ -95,7 +130,7 @@ class D11Migrator {
       $nid = $row->nid;
 
       // Check if already migrated
-      $already = $this->database->select('d7_article_migrate_map','m')
+      $already = $this->database->select($map_table,'m')
         ->fields('m',['dest_id'])
         ->condition('type','node')
         ->condition('source_id',(string)$nid)
@@ -176,6 +211,9 @@ class D11Migrator {
         }
       }
 
+      // Process body images
+      $body = $this->processBodyImages($body, $nid);
+
       // Create or update node
       if ($already) {
         // Update existing node
@@ -255,7 +293,7 @@ class D11Migrator {
 
         $this->migrateAliasFor('node',$nid,$new_nid);
 
-        $this->database->insert('d7_article_migrate_map')->fields(['type'=>'node','source_id'=>(string)$nid,'dest_id'=>(string)$new_nid])->execute();
+        $this->database->insert($map_table)->fields(['type'=>'node','source_id'=>(string)$nid,'dest_id'=>(string)$new_nid])->execute();
 
         $domain_info = !empty($this->domainIds) ? ' (domains: ' . implode(', ', $this->domainIds) . ')' : '';
         $this->logger->info("Migrated D11 source nid {$nid} -> D11 dest nid {$new_nid}{$domain_info}");
@@ -265,9 +303,10 @@ class D11Migrator {
 
   protected function migrateTerm($source_tid) {
     $source = $this->getSourceDb();
+    $map_table = $this->getMigrationMapTable();
 
     // Check if already migrated
-    $already = $this->database->select('d7_article_migrate_map','m')
+    $already = $this->database->select($map_table,'m')
       ->fields('m',['dest_id'])
       ->condition('type','term')
       ->condition('source_id',(string)$source_tid)
@@ -310,7 +349,7 @@ class D11Migrator {
       $this->logger->notice("Term '{$term_row->name}' already exists in D11 dest as tid {$new_tid}, reusing");
 
       // Store mapping
-      $this->database->insert('d7_article_migrate_map')
+      $this->database->insert($map_table)
         ->fields(['type'=>'term','source_id'=>(string)$source_tid,'dest_id'=>(string)$new_tid])
         ->execute();
 
@@ -329,7 +368,7 @@ class D11Migrator {
     $new_tid = $term->id();
 
     // Store mapping
-    $this->database->insert('d7_article_migrate_map')
+    $this->database->insert($map_table)
       ->fields(['type'=>'term','source_id'=>(string)$source_tid,'dest_id'=>(string)$new_tid])
       ->execute();
 
@@ -343,9 +382,10 @@ class D11Migrator {
 
   protected function migrateFile($source_fid) {
     $source = $this->getSourceDb();
+    $map_table = $this->getMigrationMapTable();
 
     // Check if already migrated
-    $already = $this->database->select('d7_article_migrate_map','m')
+    $already = $this->database->select($map_table,'m')
       ->fields('m',['dest_id'])
       ->condition('type','file')
       ->condition('source_id',(string)$source_fid)
@@ -410,7 +450,7 @@ class D11Migrator {
         $new_fid = $file->id();
 
         // Store mapping
-        $this->database->insert('d7_article_migrate_map')
+        $this->database->insert($map_table)
           ->fields(['type'=>'file','source_id'=>(string)$source_fid,'dest_id'=>(string)$new_fid])
           ->execute();
 
@@ -490,5 +530,189 @@ class D11Migrator {
 
     $this->logger->warning("Could not convert video URL to iframe: {$video_url}");
     return NULL;
+  }
+
+  public function clearMigratedContent() {
+    $map_table = $this->getMigrationMapTable();
+    $this->logger->info("Starting to clear all migrated content from source DB: {$this->sourceDbKey} (table: {$map_table})");
+
+    // Get all migrated nodes from this source
+    $node_map = $this->database->select($map_table,'m')
+      ->fields('m',['dest_id'])
+      ->condition('type','node')
+      ->execute()
+      ->fetchCol();
+
+    $deleted_nodes = 0;
+    foreach ($node_map as $nid) {
+      $node = Node::load($nid);
+      if ($node) {
+        // Delete attached files
+        if ($node->hasField('field_image')) {
+          $images = $node->get('field_image')->getValue();
+          foreach ($images as $image) {
+            if (!empty($image['target_id'])) {
+              $file = File::load($image['target_id']);
+              if ($file) {
+                $file->delete();
+              }
+            }
+          }
+        }
+
+        $node->delete();
+        $deleted_nodes++;
+      }
+    }
+
+    $this->logger->info("Deleted {$deleted_nodes} nodes");
+
+    // Delete taxonomy terms
+    $term_map = $this->database->select($map_table,'m')
+      ->fields('m',['dest_id'])
+      ->condition('type','term')
+      ->execute()
+      ->fetchCol();
+
+    $deleted_terms = 0;
+    foreach ($term_map as $tid) {
+      $term = Term::load($tid);
+      if ($term) {
+        $term->delete();
+        $deleted_terms++;
+      }
+    }
+
+    $this->logger->info("Deleted {$deleted_terms} taxonomy terms");
+
+    // Delete path aliases for migrated content
+    $alias_storage = $this->entityTypeManager->getStorage('path_alias');
+    foreach ($node_map as $nid) {
+      $aliases = $alias_storage->loadByProperties(['path' => "/node/{$nid}"]);
+      foreach ($aliases as $alias) {
+        $alias->delete();
+      }
+    }
+    foreach ($term_map as $tid) {
+      $aliases = $alias_storage->loadByProperties(['path' => "/taxonomy/term/{$tid}"]);
+      foreach ($aliases as $alias) {
+        $alias->delete();
+      }
+    }
+
+    $this->logger->info("Deleted path aliases");
+
+    // Clear migration map entries for this source
+    $deleted_map = $this->database->delete($map_table)
+      ->execute();
+
+    $this->logger->info("Cleared {$deleted_map} entries from migration map");
+    $this->logger->info("Finished clearing all migrated content from source DB: {$this->sourceDbKey}");
+  }
+
+  protected function processBodyImages(string $body, $nid): string {
+    if (!$body) return $body;
+    libxml_use_internal_errors(true);
+    $dom = new \DOMDocument();
+    $dom->encoding = 'UTF-8';
+
+    // Load HTML with proper UTF-8 encoding
+    $dom->loadHTML('<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>' . $body . '</body></html>');
+
+    $imgs = $dom->getElementsByTagName('img');
+    $changed = FALSE;
+    $toRemove = [];
+
+    foreach ($imgs as $img) {
+      $src = $img->getAttribute('src');
+      if (!$src) continue;
+
+      $parsed = parse_url($src);
+      $isSourceUrl = preg_match('#^https?://#', $this->filesBasePath);
+
+      try {
+        // Determine the file path/URL
+        if (isset($parsed['host'])) {
+          // Image src already has full URL (e.g., http://example.com/image.jpg)
+          $fullPath = $src;
+          $isRemoteImage = true;
+        } else {
+          // Relative path (e.g., /sites/default/files/inline/images/image.jpg)
+          // Strip common Drupal path prefixes to get the relative file path
+          $relativePath = $src;
+          $relativePath = preg_replace('#^/?(sites/default/files/|public://)#', '', $relativePath);
+
+          // Construct full path
+          $fullPath = rtrim($this->filesBasePath,'/').'/'.ltrim($relativePath,'/');
+          $isRemoteImage = $isSourceUrl;
+        }
+
+        $this->logger->info("Processing body image: {$src} -> {$fullPath}");
+
+        // Get file data
+        if ($isRemoteImage) {
+          // Download from HTTP URL
+          $response = $this->httpClient->get($fullPath,['stream'=>true,'timeout'=>30]);
+          if ($response->getStatusCode() !== 200) {
+            throw new \Exception("HTTP {$response->getStatusCode()}");
+          }
+          $data = $response->getBody()->getContents();
+        } else {
+          // Copy from local filesystem
+          if (!file_exists($fullPath)) {
+            throw new \Exception("File not found: {$fullPath}");
+          }
+          $data = file_get_contents($fullPath);
+          if ($data === false) {
+            throw new \Exception("Failed to read file");
+          }
+        }
+
+        // Save to Drupal 11
+        $basename = basename(parse_url($fullPath, PHP_URL_PATH));
+        $destination = "public://body_images/{$nid}/{$basename}";
+
+        // Fix: Store dirname in variable first to avoid "pass by reference" warning
+        $destination_dir = dirname($destination);
+        $this->fileSystem->prepareDirectory($destination_dir, FileSystemInterface::CREATE_DIRECTORY | FileSystemInterface::MODIFY_PERMISSIONS);
+        $file = $this->fileRepository->writeData($data, $destination, FileSystemInterface::EXISTS_RENAME);
+
+        if ($file) {
+          $file->setPermanent();
+          $file->save();
+          // Use relative URL without domain name
+          $new_url = $this->fileUrlGenerator->generateString($file->getFileUri());
+          $img->setAttribute('src', $new_url);
+          $changed = TRUE;
+          $this->logger->info("Migrated body image: {$src} -> {$new_url}");
+        } else {
+          throw new \Exception("Failed to save file");
+        }
+      } catch (\Exception $e) {
+        $this->logger->warning("Failed to migrate body image '{$src}': {$e->getMessage()} - removing from body");
+        // Mark image for removal
+        $toRemove[] = $img;
+        $changed = TRUE;
+      }
+    }
+
+    // Remove failed images from DOM
+    foreach ($toRemove as $img) {
+      if ($img->parentNode) {
+        $img->parentNode->removeChild($img);
+      }
+    }
+
+    if ($changed) {
+      $bodyNode = $dom->getElementsByTagName('body')->item(0);
+      if ($bodyNode) {
+        $inner = '';
+        foreach ($bodyNode->childNodes as $child) {
+          $inner .= $dom->saveHTML($child);
+        }
+        return $inner;
+      }
+    }
+    return $body;
   }
 }
