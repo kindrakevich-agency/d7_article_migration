@@ -371,20 +371,11 @@ class D7Migrator {
     // Remove unwanted attributes from all elements
     $all_elements = $xpath->query('//*');
     foreach ($all_elements as $element) {
-      $attributes_to_remove = ['class', 'style', 'dir', 'align'];
+      $attributes_to_remove = ['class', 'style', 'id'];
 
       foreach ($attributes_to_remove as $attr) {
         if ($element->hasAttribute($attr)) {
           $element->removeAttribute($attr);
-          $cleaned_count++;
-        }
-      }
-
-      // Remove Google Docs internal IDs
-      if ($element->hasAttribute('id')) {
-        $id_value = $element->getAttribute('id');
-        if (strpos($id_value, 'docs-internal-guid-') === 0) {
-          $element->removeAttribute('id');
           $cleaned_count++;
         }
       }

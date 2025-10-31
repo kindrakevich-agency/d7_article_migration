@@ -165,8 +165,9 @@ Use `--update-existing` to re-migrate articles that were already imported:
 
 ### HTML Cleanup
 The module automatically cleans up body HTML during migration:
-- Removes unwanted attributes: `class`, `style`, `dir`
-- Removes Google Docs internal IDs (`docs-internal-guid-*`)
+- Removes unwanted attributes: `class`, `style`, `id`
+- Preserves the `align` attribute
+- Converts `<div>` elements with content to `<p>` tags
 - Removes empty paragraphs and divs (containing only whitespace or &nbsp;)
 - Preserves elements containing child elements like images and links
 - Converts all non-breaking spaces (`&nbsp;`) to regular spaces
