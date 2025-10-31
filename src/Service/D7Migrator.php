@@ -371,7 +371,7 @@ class D7Migrator {
     // Remove unwanted attributes from all elements
     $all_elements = $xpath->query('//*');
     foreach ($all_elements as $element) {
-      $attributes_to_remove = ['class', 'style', 'dir'];
+      $attributes_to_remove = ['class', 'style', 'dir', 'align'];
 
       foreach ($attributes_to_remove as $attr) {
         if ($element->hasAttribute($attr)) {
@@ -390,7 +390,46 @@ class D7Migrator {
       }
     }
 
-    // Remove empty paragraphs and divs (containing only &nbsp; or whitespace)
+    // Convert non-empty div elements to p tags
+    $divs = $xpath->query('//div');
+    $converted_count = 0;
+    foreach ($divs as $div) {
+      // Get text content and check if it has actual content
+      $text_content = $div->textContent;
+      $text_content = str_replace("\xc2\xa0", ' ', $text_content);
+      $normalized = trim($text_content);
+
+      // If div has content or child elements, convert to p
+      $has_element_children = false;
+      if ($div->hasChildNodes()) {
+        foreach ($div->childNodes as $child) {
+          if ($child->nodeType === XML_ELEMENT_NODE) {
+            $has_element_children = true;
+            break;
+          }
+        }
+      }
+
+      if (!empty($normalized) || $has_element_children) {
+        // Create a new p element
+        $p = $dom->createElement('p');
+
+        // Move all child nodes from div to p
+        while ($div->firstChild) {
+          $p->appendChild($div->firstChild);
+        }
+
+        // Replace div with p
+        $div->parentNode->replaceChild($p, $div);
+        $converted_count++;
+      }
+    }
+
+    if ($converted_count > 0) {
+      $this->logger->info("Converted {$converted_count} div elements to p tags");
+    }
+
+    // Remove empty paragraphs and spans (containing only &nbsp; or whitespace)
     // But preserve elements that contain child elements like images, links, etc.
     $empty_elements = $xpath->query('//p | //div | //span');
     $removed_count = 0;
