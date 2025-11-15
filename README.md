@@ -253,6 +253,21 @@ The module automatically migrates inline images found in article body HTML:
 - Failed images are automatically removed from body content with warnings logged
 - Uses proper UTF-8 encoding to preserve special characters
 
+### Body Text and Link Replacements (D11 to D11)
+
+The module automatically performs text and link replacements in the body HTML during migration:
+
+**Text Replacements:**
+- "Малин Інформ" → "Polissya Today"
+
+**Domain Link Replacements:**
+- `https://malininform.com` → `https://polissya.today`
+- `https://polisya.today` → `https://polissya.today`
+- `https://malyn-live.com` → `https://polissya.today`
+- `https://radomyshl.city` → `https://polissya.today`
+
+Both HTTP and HTTPS versions of these domains are replaced. This ensures all internal links and references are updated to the new domain structure.
+
 ### Video Embed Field Conversion
 
 If the source article has a `field_video` (Video Embed field), it will be converted to an iframe and appended to the article body. Supported video platforms:
