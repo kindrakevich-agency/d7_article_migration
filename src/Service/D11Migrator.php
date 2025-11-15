@@ -289,6 +289,9 @@ class D11Migrator {
       // Process body images
       $body = $this->processBodyImages($body, $nid);
 
+      // Replace text and update domain links in body
+      $body = $this->replaceBodyTextAndLinks($body);
+
       // Get random author for article
       $author_uid = $this->getRandomUserId();
 
@@ -791,6 +794,32 @@ class D11Migrator {
         return $inner;
       }
     }
+    return $body;
+  }
+
+  protected function replaceBodyTextAndLinks(string $body): string {
+    if (!$body) return $body;
+
+    // Replace text: "Малин Інформ" to "Polissya Today"
+    $body = str_replace('Малин Інформ', 'Polissya Today', $body);
+
+    // Define domain replacements
+    $domainReplacements = [
+      'https://malininform.com' => 'https://polissya.today',
+      'http://malininform.com' => 'https://polissya.today',
+      'https://polisya.today' => 'https://polissya.today',
+      'http://polisya.today' => 'https://polissya.today',
+      'https://malyn-live.com' => 'https://polissya.today',
+      'http://malyn-live.com' => 'https://polissya.today',
+      'https://radomyshl.city' => 'https://polissya.today',
+      'http://radomyshl.city' => 'https://polissya.today',
+    ];
+
+    // Replace domains in links
+    foreach ($domainReplacements as $oldDomain => $newDomain) {
+      $body = str_replace($oldDomain, $newDomain, $body);
+    }
+
     return $body;
   }
 }
